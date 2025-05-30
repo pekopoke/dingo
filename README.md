@@ -21,17 +21,16 @@
 
 <div align="center">
 
-[English](README.md) · [简体中文](README_zh-CN.md)
+[English](README.md) · [简体中文](README_zh-CN.md) · [日本語](README_ja.md)
 
 </div>
 
 
-<div align="center">
-  <a href="https://discord.gg/Jhgb2eKWh8" style="text-decoration:none;">
-    <img src="https://user-images.githubusercontent.com/25839884/218347213-c080267f-cbb6-443e-8532-8e1ed9a58ea9.png" width="3%" alt="Discord" /></a>
-  <a href="https://huggingface.co/spaces/DataEval/dingo" style="text-decoration:none;">
-    <img src="https://huggingface.co/datasets/huggingface/brand-assets/resolve/main/hf-logo.png" width="3%" alt="Hugging Face" /></a>
-</div>
+<!-- join us -->
+
+<p align="center">
+    👋 join us on <a href="https://discord.gg/Jhgb2eKWh8" target="_blank">Discord</a> and <a href="./docs/assets/wechat.jpg" target="_blank">WeChat</a>
+</p>
 
 
 # Changelog
@@ -56,64 +55,36 @@ pip install dingo-python
 
 ## Example Use Cases
 
-### 1. Using Evaluate Core
+### 1. Evaluate LLM chat data
 
 ```python
 from dingo.config.config import DynamicLLMConfig
-from dingo.io.input.MetaData import MetaData
+from dingo.io.input.Data import Data
 from dingo.model.llm.llm_text_quality_model_base import LLMTextQualityModelBase
 from dingo.model.rule.rule_common import RuleEnterAndSpace
 
+data = Data(
+    data_id='123',
+    prompt="hello, introduce the world",
+    content="Hello! The world is a vast and diverse place, full of wonders, cultures, and incredible natural beauty."
+)
 
 def llm():
-    data = MetaData(
-        data_id='123',
-        prompt="hello, introduce the world",
-        content="Hello! The world is a vast and diverse place, full of wonders, cultures, and incredible natural beauty."
-    )
-
     LLMTextQualityModelBase.dynamic_config = DynamicLLMConfig(
-        key='',
-        api_url='',
-        # model='',
+        key='YOUR_API_KEY',
+        api_url='https://api.openai.com/v1/chat/completions',
+        model='gpt-4o',
     )
     res = LLMTextQualityModelBase.eval(data)
     print(res)
 
 
 def rule():
-    data = MetaData(
-        data_id='123',
-        prompt="hello, introduce the world",
-        content="Hello! The world is a vast and diverse place, full of wonders, cultures, and incredible natural beauty."
-    )
-
     res = RuleEnterAndSpace().eval(data)
     print(res)
 ```
 
-### 2. Evaluate Local Text File (Plaintext)
-
-```python
-from dingo.io import InputArgs
-from dingo.exec import Executor
-
-# Evaluate a plaintext file
-input_data = {
-    "eval_group": "sft",          # Rule set for SFT data
-    "input_path": "data.txt",      # Path to local text file
-    "dataset": "local",
-    "data_format": "plaintext",    # Format: plaintext
-    "save_data": True              # Save evaluation results
-}
-
-input_args = InputArgs(**input_data)
-executor = Executor.exec_map["local"](input_args)
-result = executor.execute()
-print(result)
-```
-
-### 3. Evaluate Hugging Face Dataset
+### 2. Evaluate Dataset
 
 ```python
 from dingo.io import InputArgs
@@ -125,58 +96,6 @@ input_data = {
     "input_path": "tatsu-lab/alpaca", # Dataset from Hugging Face
     "data_format": "plaintext",    # Format: plaintext
     "save_data": True              # Save evaluation results
-}
-
-input_args = InputArgs(**input_data)
-executor = Executor.exec_map["local"](input_args)
-result = executor.execute()
-print(result)
-```
-
-### 4. Evaluate JSON/JSONL Format
-
-```python
-from dingo.io import InputArgs
-from dingo.exec import Executor
-
-# Evaluate a JSON file
-input_data = {
-    "eval_group": "default",       # Default rule set
-    "input_path": "data.json",     # Path to local JSON file
-    "dataset": "local",
-    "data_format": "json",         # Format: json
-    "column_content": "text",      # Column containing the text to evaluate
-    "save_data": True              # Save evaluation results
-}
-
-input_args = InputArgs(**input_data)
-executor = Executor.exec_map["local"](input_args)
-result = executor.execute()
-print(result)
-```
-
-### 5. Using LLM for Evaluation
-
-```python
-from dingo.io import InputArgs
-from dingo.exec import Executor
-
-# Evaluate using GPT model
-input_data = {
-    "input_path": "data.jsonl",    # Path to local JSONL file
-    "dataset": "local",
-    "data_format": "jsonl",
-    "column_content": "content",
-    "custom_config": {
-        "prompt_list": ["PromptRepeat"],  # Prompt to use
-        "llm_config": {
-            "detect_text_quality": {
-                "model": "gpt-4o",
-                "key": "YOUR_API_KEY",
-                "api_url": "https://api.openai.com/v1/chat/completions"
-            }
-        }
-    }
 }
 
 input_args = InputArgs(**input_data)
@@ -226,6 +145,22 @@ Where `output_directory` contains the evaluation results with a `summary.json` f
 
 ## Online Demo
 Try Dingo on our online demo: [(Hugging Face)🤗](https://huggingface.co/spaces/DataEval/dingo)
+
+
+# MCP Server
+
+Dingo includes an experimental Model Context Protocol (MCP) server. For details on running the server and integrating it with clients like Cursor, please see the dedicated documentation:
+
+[English](README_mcp.md) · [简体中文](README_mcp_zh-CN.md) · [日本語](README_mcp_ja.md)
+
+## Video Demonstration
+
+To help you get started quickly with Dingo MCP, we've created a video walkthrough:
+
+https://github.com/user-attachments/assets/aca26f4c-3f2e-445e-9ef9-9331c4d7a37b
+
+This video demonstrates step-by-step how to use Dingo MCP server with Cursor.
+
 
 # Data Quality Metrics
 
@@ -364,7 +299,7 @@ If the built-in rules don't meet your requirements, you can create custom ones:
 from dingo.model import Model
 from dingo.model.rule.base import BaseRule
 from dingo.config.config import DynamicRuleConfig
-from dingo.io import MetaData
+from dingo.io import Data
 from dingo.model.modelres import ModelRes
 
 @Model.rule_register('QUALITY_BAD_RELEVANCE', ['default'])
@@ -374,7 +309,7 @@ class MyCustomRule(BaseRule):
     dynamic_config = DynamicRuleConfig(pattern=r'your_pattern_here')
 
     @classmethod
-    def eval(cls, input_data: MetaData) -> ModelRes:
+    def eval(cls, input_data: Data) -> ModelRes:
         res = ModelRes()
         # Your rule implementation here
         return res
@@ -424,7 +359,7 @@ from pyspark.sql import SparkSession
 
 # Initialize Spark
 spark = SparkSession.builder.appName("Dingo").getOrCreate()
-spark_rdd = spark.sparkContext.parallelize([...])  # Your data as MetaData objects
+spark_rdd = spark.sparkContext.parallelize([...])  # Your data as Data objects
 
 input_args = InputArgs(eval_group="default", save_data=True)
 executor = Executor.exec_map["spark"](input_args, spark_session=spark, spark_rdd=spark_rdd)
@@ -463,19 +398,17 @@ Example summary:
 ```
 
 
-# MCP Server (Experimental)
-
-Dingo includes an experimental Model Context Protocol (MCP) server. For details on running the server and integrating it with clients like Cursor, please see the dedicated documentation:
-
-[**Dingo MCP Server Documentation (README_mcp.md)**](README_mcp.md)
-
-
 # Research & Publications
 
-- **"Comprehensive Data Quality Assessment for Multilingual WebData"** : [WanJuanSiLu: A High-Quality Open-Source Webtext
-Dataset for Low-Resource Languages](https://arxiv.org/pdf/2501.14506)
-- **"Pre-training data quality using the DataMan methodology"** : [DataMan: Data Manager for Pre-training Large Language Models](https://openreview.net/pdf?id=eNbA8Fqir4)
+## Research Powered by Dingo
+- **WanJuanSiLu**: [A High-Quality Open-Source Webtext Dataset for Low-Resource Languages](https://arxiv.org/pdf/2501.14506)
+  *Uses Dingo for comprehensive data quality assessment of multilingual web data*
 
+## Methodologies Implemented in Dingo
+- **DataMan Methodology**: [DataMan: Data Manager for Pre-training Large Language Models](https://openreview.net/pdf?id=eNbA8Fqir4)
+  *Dingo implements the DataMan methodology for pre-training data quality assessment*
+- **RedPajama-Data-v2**: [RedPajama-Data](https://github.com/togethercomputer/RedPajama-Data)
+  *Dingo implements parts of the RedPajama-Data-v2 methodology for web text quality assessment and filtering*
 
 # Future Plans
 
@@ -500,6 +433,8 @@ We appreciate all the contributors for their efforts to improve and enhance `Din
 # License
 
 This project uses the [Apache 2.0 Open Source License](LICENSE).
+
+This project uses fasttext for some functionality including language detection. fasttext is licensed under the MIT License, which is compatible with our Apache 2.0 license and provides flexibility for various usage scenarios.
 
 # Citation
 
