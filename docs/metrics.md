@@ -86,6 +86,12 @@ This document provides comprehensive information about all quality metrics used 
 | `QUALITY_BAD_EFFECTIVENESS` | RuleAudioDuration | Check whether the audio duration meets the standard | Internal Implementation | N/A | N/A |
 | `QUALITY_BAD_EFFECTIVENESS` | RuleAudioSnrQuality | Check whether the audio signal-to-noise ratio meets the standard | Internal Implementation | N/A | N/A |
 
+### Document Quality Assessment Metrics
+
+| Type | Metric | Description | Paper Source | Evaluation Results | Examples |
+|------|--------|-------------|--------------|-------------------|----------|
+| `LLMAISmell` | LLMAISmell | Detects AI-generated writing patterns in requirement documents across 5 dimensions: hollow truisms, repetition, rainb... | Internal Implementation | N/A | [📝 View Example](../examples/llm_and_rule/llm_local.py) |
+
 ### Job Hunting Strategy Metrics
 
 | Type | Metric | Description | Paper Source | Evaluation Results | Examples |
@@ -126,7 +132,7 @@ This document provides comprehensive information about all quality metrics used 
 
 | Type | Metric | Description | Paper Source | Evaluation Results | Examples |
 |------|--------|-------------|--------------|-------------------|----------|
-| `QUALITY_BAD_EFFECTIVENESS` | RuleMetadataSimilarity, RuleQuanliangFieldValidation | 检查元数据字段与基准数据的相似度匹配，阈值默认为0.6; Validate Quanliang metadata fields and report invalid fields | Internal Implementation | N/A | N/A |
+| `QUALITY_BAD_EFFECTIVENESS` | RuleMetadataSimilarity, RuleQuanliangFieldValidation, RuleAuthorFieldValidation, RuleSourceFieldValidation | 检查元数据字段与基准数据的相似度匹配，阈值默认为0.6; Validate Quanliang metadata fields and report invalid fields; Validate OpenAlex author f... | Internal Implementation | N/A | N/A |
 
 ### Rule-Based RESUME Quality Metrics
 
