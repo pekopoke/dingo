@@ -32,6 +32,27 @@ def test_v8_prompt_uses_detailed_formula_labels():
         assert f"`0 / Completeness / {label}`" in LLMTextQualityV8.prompt
 
 
+def test_v8_prompt_uses_detailed_table_labels_in_expected_order():
+    table_labels = [
+        "Table_Missing",
+        "Table_Unparseable",
+        "Table_Partial_Loss",
+        "Table_Cell_Corruption",
+        "Table_Header_Corruption",
+        "Table_Structure_Corruption",
+        "Table_Layout_Corruption",
+        "Table_Extra_Content",
+    ]
+
+    assert "Table_Corruption" not in LLMTextQualityV8.prompt
+    assert "Table_Data_Inconsistency" not in LLMTextQualityV8.prompt
+    label_positions = []
+    for label in table_labels:
+        label_positions.append(LLMTextQualityV8.prompt.index(f"**{label}**"))
+        assert f"`0 / Completeness / {label}`" in LLMTextQualityV8.prompt
+    assert label_positions == sorted(label_positions)
+
+
 def test_v8_aggregates_multiple_defects():
     response = json.dumps([
         {"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": "Missing spaces"},

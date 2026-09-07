@@ -108,18 +108,81 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
   - A prose passage that mentions a result without displaying its derivation.
   - An isolated recoverable OCR typo that does not materially affect formula meaning.
 
-- **Table_Corruption**: A clearly intended table whose structure or essential data is damaged
-  - Misaligned rows/columns: values can no longer be matched to the correct headers
-  - Missing essential body data: only a title, header, note, or discussion remains where the text explicitly depends on table values
-  - Truncated rows/columns or broken HTML/Markdown table markup that makes the table unreadable
-  - Flattened extraction is BAD only when row/column relationships cannot be recovered from the text
-  - Impact: Models cannot learn proper table representation
+- **Table quality labels**: Evaluate extraction or representation defects in HTML, Markdown, or plain-text tables. Do not evaluate whether a well-formed table is factually correct.
 
-  ⚠️ **DO NOT flag**:
-  - A simple key-value table without a header
-  - A list, catalog, bibliography, or metadata block that was never a table
-  - A flattened table whose field-value relationships remain clear and readable
-  - A passage that references a table located outside the provided sample, unless the sample itself shows extraction loss
+  **Shared table policy**:
+  - Use only evidence visible in the input. Do not reconstruct a source table from outside knowledge.
+  - A defect must be explicit and materially affect table parsing, field relationships, content, or display. Do not flag a harmless style difference.
+  - For one damaged span, return the single label that most directly describes the defect. Do not describe the same missing cell, broken tag, or shifted value with multiple labels.
+  - Multiple table labels are allowed only for independent defects, such as one entirely missing table and a different table contaminated by an image-storage URL.
+  - A list, catalog, bibliography, metadata block, or key-value passage is not automatically a table.
+
+  **Table_Missing** — An entire table or all meaningful body data that should visibly be present is absent.
+  - Flag when an introduction such as "shown in the table below" or "parameters are as follows" is followed by no table before the next section or the end of the sample.
+  - Flag when only a table number, caption, header, unit, legend, footnote, continuation marker, or source remains and no meaningful body rows survive.
+  - Flag title-only gaps among neighboring numbered tables when the current text explicitly depends on the absent values.
+  - Do not flag a table located outside the provided sample, an external reference, an intentionally omitted table, or a harmless gap in table numbering.
+  - If meaningful rows or cells remain, use Table_Partial_Loss. If the content remains but is split or flattened, use Table_Layout_Corruption.
+
+  **Table_Unparseable** — Broken HTML, Markdown, or other table markup prevents a standard parser from reliably identifying the table, rows, or cells.
+  - Flag unclosed, orphaned, truncated, or wrongly nested `<table>`, `<tr>`, `<td>`, or `<th>` tags.
+  - Flag malformed tag attributes or quotes when they destroy tag boundaries, such as an unfinished `<td colsp`.
+  - Flag a Markdown table whose required separator row or cell delimiters are damaged so severely that row and column boundaries cannot be parsed.
+  - Flag unescaped cell pipes only when they materially destabilize Markdown column parsing.
+  - Do not mechanically compare tag or pipe counts; confirm that parsing actually fails or becomes unreliable.
+  - If markup parses but grid relationships are wrong, use Table_Structure_Corruption. If valid table blocks are merely separated or displaced, use Table_Layout_Corruption.
+
+  **Table_Partial_Loss** — A recognizable table remains, but meaningful rows, columns, cells, or contiguous content have been removed.
+  - Flag missing numbered row ranges, an essential column left empty throughout, rows that retain labels but lose all values, or a table truncated after its first portion.
+  - Flag cells cut off mid-value or mid-sentence when the missing continuation is explicit.
+  - Flag a missing subgroup, year range, result column, total, parameter, or other necessary part when the surviving table makes the loss visible.
+  - Do not flag intentional blank cells, valid merged cells, or explicit `N/A`, `NaN`, dash, or undisclosed values without evidence of extraction loss.
+  - If no meaningful body data remains, use Table_Missing. If erroneous or garbage characters remain in place of the content, use Table_Cell_Corruption.
+
+  **Table_Cell_Corruption** — A body cell remains in a recoverable row and column position, but its internal text, number, symbol, unit, or code is misrecognized, substituted, split, merged, repeated, or replaced by garbage.
+  - Flag truncated or mangled entity names, OCR lookalike substitutions, damaged decimal points or signs, lost characters in identifiers, and corrupted IPA, currency, percentage, or unit symbols.
+  - Flag long repetitive character runs or meaningless placeholder tokens that replace expected cell content.
+  - Require visible extraction evidence, such as an intact form elsewhere in the input, a consistent table pattern, or unmistakable OCR artifacts.
+  - If two neighboring fields or columns are fused into one cell, use Table_Structure_Corruption. If the damaged cell is a header, use Table_Header_Corruption.
+  - If an external URL, page header, paragraph, or extractor marker is inserted, use Table_Extra_Content.
+  - Do not use this label solely because a readable value seems factually or statistically implausible.
+
+  **Table_Header_Corruption** — The body remains, but column names, grouped headers, subheaders, row-heading schemes, or header spans are missing, wrong, duplicated, truncated, or fused.
+  - Flag an essential column with no header, two different years carrying the same year label, a header copied from an unrelated table, or multiple column names compressed into one header cell.
+  - Flag a grouped header whose `rowspan` or `colspan` contradicts its visible subheaders, making the column meaning incomplete or wrong.
+  - Flag a repeated header inserted into the table body only when it disrupts the header hierarchy rather than serving as a normal continuation header.
+  - Do not flag valid multilevel headers, repeated headers on continuation pages, standard abbreviations, or a simple table that does not need an explicit header.
+  - If the header is correct but body values are shifted, use Table_Structure_Corruption. If only a header remains with no body, use Table_Missing.
+
+  **Table_Structure_Corruption** — The table markup can be parsed and content remains, but row, column, header, cell, or span relationships in the internal grid are damaged.
+  - Flag rows shifted left or right, labels shifted between records, header and body column counts that cannot be reconciled, or values placed under the wrong headers.
+  - Flag adjacent fields fused into one cell, one logical record split across rows, several records collapsed into a cell, or broken category hierarchies.
+  - Flag incorrect `rowspan` or `colspan` usage that makes values cover the wrong rows or columns.
+  - Do not flag valid merged cells merely because different rows contain different numbers of `<td>` elements.
+  - If the markup itself cannot be parsed, use Table_Unparseable. If one cell's position is clear and only its tokens are damaged, use Table_Cell_Corruption.
+  - Do not flag a readable value solely because it appears implausible; require visible evidence of extraction or relationship damage.
+
+  **Table_Layout_Corruption** — Table content may remain locally parseable, but block-level placement, order, boundaries, or association among the header, body, caption, continuation, and surrounding section is damaged.
+  - Flag one logical table split into disconnected blocks, a header separated from its body, rows dropped outside `</table>`, or a continuation detached from the original table.
+  - Flag a multicolumn table flattened into disjoint lists only when row-to-value or header-to-value relationships can no longer be recovered.
+  - Flag a table body placed under the wrong caption or section, or neighboring table captions and bodies placed in the wrong order.
+  - Do not flag normal continuation tables, intentionally separate table blocks, harmless page wrapping, or plain-text tables whose relationships remain clear.
+  - If the internal grid is damaged within one table, use Table_Structure_Corruption. If foreign material is inserted inside a table, use Table_Extra_Content.
+
+  **Table_Extra_Content** — Content not belonging to the current table is inserted into the table or attached to a cell as incorrect data.
+  - Flag raw S3 or extractor URLs, internal storage paths, leaked HTML/extractor markers, UI text, page headers, page footers, page numbers, or navigation inserted into cells.
+  - Flag body paragraphs, section headings, captions, source lines, annotations, or an unrelated table inserted into the current table's row sequence.
+  - Flag citations or footnote numbers fused into numeric values only when they form incorrect table data rather than a cleanly separated reference.
+  - Do not flag legitimate notes, sources, units, formulas, images, links, or multiline descriptions that are valid table content.
+  - If the table is merely positioned under the wrong caption or section, use Table_Layout_Corruption. If a cell itself contains OCR garbage without foreign material, use Table_Cell_Corruption.
+
+  **Normal table patterns (DO NOT flag)**:
+  - A simple key-value table without an explicit header.
+  - Valid multilevel headers, `rowspan`, `colspan`, empty cells, totals, footnotes, and continuation headers.
+  - A list, catalog, bibliography, or metadata block that was never intended to be a table.
+  - A flattened or plain-text table whose field-value relationships remain clear and readable.
+  - A passage that references a table outside the provided sample without visible evidence of extraction loss.
+  - A syntactically valid, structurally coherent table containing unusual values; table labels evaluate extraction and representation, not factual truth.
 
 - **Code_Corruption**: Recognizable source code whose formatting or syntax tokens were damaged during extraction
   **Common corruption patterns**:
@@ -284,7 +347,14 @@ Allowed score/type/name combinations:
 - `0 / Completeness / Formula_Structure_Corruption`
 - `0 / Completeness / Formula_Layout_Corruption`
 - `0 / Completeness / Formula_Extra_Content`
-- `0 / Completeness / Table_Corruption`
+- `0 / Completeness / Table_Missing`
+- `0 / Completeness / Table_Unparseable`
+- `0 / Completeness / Table_Partial_Loss`
+- `0 / Completeness / Table_Cell_Corruption`
+- `0 / Completeness / Table_Header_Corruption`
+- `0 / Completeness / Table_Structure_Corruption`
+- `0 / Completeness / Table_Layout_Corruption`
+- `0 / Completeness / Table_Extra_Content`
 - `0 / Completeness / Code_Corruption`
 - `0 / Effectiveness / Garbled_Characters`
 - `0 / Effectiveness / Words_Stuck`
@@ -330,6 +400,10 @@ Application form
 Payment receipt"
 Output: [{"score": 1, "type": "Good", "name": "None", "reason": "A clear itemized list; list entries do not require sentence-ending punctuation"}]
 
+**Example 1.9 (Good - Valid Multilevel Table)**:
+Input: "<table><tr><th rowspan='2'>Region</th><th colspan='2'>Sales</th></tr><tr><th>2023</th><th>2024</th></tr><tr><td>North</td><td>120</td><td>135</td></tr></table>"
+Output: [{"score": 1, "type": "Good", "name": "None", "reason": "The multilevel header and merged cells form a valid, recoverable table structure"}]
+
 **Example 2 (Bad - Entire Formula Missing)**:
 Input: "The compound has the following structure: [Chemical Formula 1]. In Formula 1, R is hydrogen and n is an integer from 1 to 6."
 Output: [{"score": 0, "type": "Completeness", "name": "Formula_Missing", "reason": "Only the placeholder '[Chemical Formula 1]' remains, while the following sentence defines variables from the absent structure"}]
@@ -361,6 +435,38 @@ Output: [{"score": 0, "type": "Completeness", "name": "Formula_Extra_Content", "
 **Example 2.7 (Bad - Independent Formula Defects)**:
 Input: "The material structure is: [Formula 1]. Separately, the energy equation is $E=mc^2$ latex."
 Output: [{"score": 0, "type": "Completeness", "name": "Formula_Missing", "reason": "The material structure is absent and only '[Formula 1]' remains"}, {"score": 0, "type": "Completeness", "name": "Formula_Extra_Content", "reason": "A separate valid energy formula is followed by the stray extractor token 'latex'"}]
+
+**Example 2.8 (Bad - Entire Table Missing)**:
+Input: "Table 4. Monthly Production\nUnit: tonnes\nSource: Operations database\n\n5. Discussion"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Missing", "reason": "Only the caption, unit, and source for Table 4 remain before the next section; no table body is present"}]
+
+**Example 2.9 (Bad - Unparseable Table)**:
+Input: "<table><tr><th>Name</th><th>Score</tr><tr><td>Alice</td><td>91</td></table"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Unparseable", "reason": "The Score header cell is not closed and the final table closing tag is truncated, so the HTML table boundaries cannot be parsed reliably"}]
+
+**Example 2.10 (Bad - Partial Table Loss)**:
+Input: "The table reports all five monitored sites. <table><tr><th>Site</th><th>Result</th></tr><tr><td>1</td><td>Pass</td></tr><tr><td>2</td><td>Pass</td></tr><tr><td>5</td><td>Fail</td></tr></table>"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Partial_Loss", "reason": "The text says all five sites are reported, but the surviving table skips the complete rows for sites 3 and 4"}]
+
+**Example 2.11 (Bad - Cell Content Corruption)**:
+Input: "Status values are Yes or No. <table><tr><th>Item</th><th>Status</th></tr><tr><td>A</td><td>Yes</td></tr><tr><td>B</td><td>N□</td></tr></table>"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Cell_Corruption", "reason": "The status cell for item B contains the OCR placeholder character '□' instead of a valid Yes/No value while its row and column position remain clear"}]
+
+**Example 2.12 (Bad - Header Corruption)**:
+Input: "<table><tr><th>Metric</th><th>2024</th><th>2024</th></tr><tr><td>Emissions</td><td>81</td><td>95</td></tr></table> Footnote: The second year column contains revised 2023 data."
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Header_Corruption", "reason": "Both data columns are labeled 2024 even though the visible footnote identifies the second one as revised 2023 data"}]
+
+**Example 2.13 (Bad - Internal Table Structure)**:
+Input: "<table><tr><th>Date</th><th>Description</th><th>Amount</th><th>Balance</th><th>Charges</th></tr><tr><td>19 Jun</td><td>Payment</td><td>Vendor A</td><td></td><td>75.00</td><td>125.00</td><td></td></tr></table>"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Structure_Corruption", "reason": "The header defines five columns but the transaction row contains seven cells, shifting the amount and balance away from their intended headers"}]
+
+**Example 2.14 (Bad - Table Layout)**:
+Input: "<table><tr><th>Name</th><th>Year</th><th>Score</th></tr></table>\nAlice\nBob\n2024\n2023\n91\n88"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Layout_Corruption", "reason": "The header is isolated in one table while the body is flattened into three disjoint lists, so names, years, and scores cannot be reliably paired"}]
+
+**Example 2.15 (Bad - Extra Content in Table)**:
+Input: "<table><tr><th>Document</th><th>Date</th></tr><tr><td>Invoice 1158</td><td><img src='s3://internal-bucket/page-4.jpg'/></td></tr></table>"
+Output: [{"score": 0, "type": "Completeness", "name": "Table_Extra_Content", "reason": "An internal S3 image-storage URL is inserted in the Date cell as if it were table data"}]
 
 **Example 3 (Bad - Garbled Characters)**:
 Input: "The exported text contains broken symbols â€™ â€œ □□□ ï»¿ throughout the paragraph."
