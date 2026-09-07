@@ -22,7 +22,6 @@ class TestSummaryModel:
     def test_input_args_are_serialized(self):
         input_args = InputArgs(**{
             "input_path": "data.jsonl",
-            "exclude_fields": [],
             "evaluator": [{
                 "fields": {"content": "content"},
                 "evals": [{
@@ -41,7 +40,7 @@ class TestSummaryModel:
         serialized = summary.to_dict()["input_args"]
         assert serialized["input_path"] == "data.jsonl"
         assert serialized["evaluator"][0]["evals"][0]["config"]["model"] == "test-model"
-        assert serialized["evaluator"][0]["evals"][0]["config"]["key"] == "secret-key"
+        assert "key" not in serialized["evaluator"][0]["evals"][0]["config"]
 
     def test_input_args_to_dict_recursively_excludes_fields(self):
         input_args = InputArgs(**{
