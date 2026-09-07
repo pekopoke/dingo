@@ -266,6 +266,41 @@ class TestSummaryModel:
         # 验证没有分数统计字段
         assert "metrics_score" not in result
 
+    def test_to_dict_sorts_type_mappings_by_key(self):
+        summary = SummaryModel(
+            type_count={
+                "response": {"Similarity.Duplication": 2},
+                "content": {
+                    "Security.Prohibition": 1,
+                    "Completeness.Formula_Missing": 3,
+                    "Effectiveness.Words_Stuck": 2,
+                },
+            },
+            type_ratio={
+                "response": {"Similarity.Duplication": 0.2},
+                "content": {
+                    "Security.Prohibition": 0.1,
+                    "Completeness.Formula_Missing": 0.3,
+                    "Effectiveness.Words_Stuck": 0.2,
+                },
+            },
+        )
+
+        result = summary.to_dict()
+
+        assert list(result["type_count"]) == ["content", "response"]
+        assert list(result["type_count"]["content"]) == [
+            "Completeness.Formula_Missing",
+            "Effectiveness.Words_Stuck",
+            "Security.Prohibition",
+        ]
+        assert list(result["type_ratio"]) == ["content", "response"]
+        assert list(result["type_ratio"]["content"]) == [
+            "Completeness.Formula_Missing",
+            "Effectiveness.Words_Stuck",
+            "Security.Prohibition",
+        ]
+
     def test_add_token_usage_and_to_dict(self):
         """测试 LLM token 使用量统计输出"""
         summary = SummaryModel(task_name="test_task", task_id="test_token_001")

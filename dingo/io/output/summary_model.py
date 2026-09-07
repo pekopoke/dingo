@@ -158,6 +158,14 @@ class SummaryModel(BaseModel):
         return round(sum(averages) / len(averages), 2) if averages else 0.0
 
     def to_dict(self):
+        sorted_type_count = {
+            field_key: dict(sorted(type_counts.items()))
+            for field_key, type_counts in sorted(self.type_count.items())
+        }
+        sorted_type_ratio = {
+            field_key: dict(sorted(type_ratios.items()))
+            for field_key, type_ratios in sorted(self.type_ratio.items())
+        }
         result = {
             'task_id': self.task_id,
             'task_name': self.task_name,
@@ -170,8 +178,8 @@ class SummaryModel(BaseModel):
             'num_good': self.num_good,
             'num_bad': self.num_bad,
             'total': self.total,
-            'type_count': self.type_count,
-            'type_ratio': self.type_ratio,
+            'type_count': sorted_type_count,
+            'type_ratio': sorted_type_ratio,
         }
 
         # 如果有指标分数统计，以层级结构添加到输出中（与 type_ratio 结构一致）
