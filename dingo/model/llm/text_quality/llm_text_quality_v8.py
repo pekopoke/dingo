@@ -36,46 +36,77 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 **Impact**: Broken structures prevent models from learning correct formatting patterns.
 
 **Check for**:
-- **Formula_Corruption**: Mathematical or scientific expressions with **broken syntax** OR **systematically stripped variables, symbols, or formulas**
+- **Formula quality labels**: Evaluate extraction or representation defects in mathematical formulas, equations, chemical formulas, chemical structures, and formula-like scientific notation. Do not evaluate whether a mathematically well-formed statement is factually true.
 
-  Two failure modes:
+  **Shared formula policy**:
+  - Use only evidence visible in the input. Do not reconstruct a source formula from outside knowledge.
+  - A defect must be explicit and materially affect understanding, parsing, or display. Do not flag a harmless isolated style difference.
+  - For one damaged span, return the single label that most directly describes the defect. Do not describe the same missing brace, symbol, or fragment with multiple labels.
+  - Multiple formula labels are allowed only for independent defects, such as one entirely missing formula and a different formula contaminated by a page header.
+  - Ordinary prose typos, game notation, navigation, numbering, and non-formula text are outside these labels.
 
-  **(A) Broken LaTeX syntax** — delimiters or environments are present but malformed:
-  - Delimiters unmatched: $ without closing $ (LaTeX context, not dollar signs)
-  - Environments unclosed: \begin{align} without \end{align}
-  - Syntax broken: \frac{a}{b missing closing }
-  - Formula-related HTML tags unclosed: <sub>text without </sub>
-  - Apply only when the malformed expression is clearly mathematical/scientific and cannot be reliably parsed or understood
+  **Formula_Missing** — An entire formula, equation, matrix, or chemical structure that should visibly be present is absent.
+  - Flag when an introduction such as "the formula is", "we obtain", "the matrix is", or "the structure is" is followed by no formula.
+  - Flag when only a formula number or placeholder such as `[Formula 1]`, `[Chemical Formula 1]`, or `(I)` remains, while following text defines variables from the absent formula.
+  - Flag when a formula position is replaced by an unrelated page header, page number, or paragraph, leaving the surrounding derivation broken.
+  - Flag repeated references to absent equations only when the current sample visibly depends on them and the missing content breaks the derivation.
+  - Do not flag an external citation, an explicitly omitted derivation, a harmless gap in equation numbering, or a passage that merely mentions a result without promising to display it.
+  - Do not infer that a formula was missing merely because a formula would be useful.
 
-  **(B) Stripped mathematical content** — symbols/formulas systematically removed during extraction:
-  - Orphan hyphens from stripped Greek letters: "κ-solutions" → "-solutions", "ε-net" → "-net"
-  - Empty positions after connective words: "thus ;" or "the interval ;" where a formula was removed
-  - Sentences referencing variables/expressions that are absent: "a small number" (number missing), "we have ." (equation missing)
-  - Systematic loss: multiple occurrences throughout the text, or loss of a central formula required to understand the passage; not one or two minor typos
-  - Impact: Mathematical text becomes incoherent; models learn broken academic writing patterns
+  **Formula_Partial_Loss** — A formula remains, but a meaningful mathematical or scientific component has been removed.
+  - Components include variables, constants, operators, relation or mapping symbols, operands, numerator or denominator, equation sides, function arguments, sum/integral limits, piecewise branches, chemical subscripts, charges, or complete subexpressions.
+  - Examples include `T(s,a,s') [0,1]` with a visibly missing mapping arrow, `x+y=` with the right-hand side absent, a fraction with no denominator, or a chemical formula with a clearly missing element count.
+  - Use this label when meaningful formula content is absent. If erroneous or garbled characters remain in its place, use Formula_Token_Corruption instead.
+  - If only a LaTeX delimiter, required brace, or environment terminator is missing and parsing fails, use Formula_Unparseable instead.
+  - Do not flag valid shorthand, an omitted derivation, or a term that is only suspected to be absent from domain knowledge.
 
-  Example (BAD — stripped symbols):
-  "Let be a -solution to the Ricci flow which is -noncollapsed. Ancient, in the sense that t ranges on the interval ; Bounded curvature, thus ;"
-  (Greek letters κ stripped from "κ-solution" and "κ-noncollapsed"; interval expression and inequality after "thus" removed entirely)
+  **Formula_Token_Corruption** — Formula characters, numbers, variables, or symbols are misrecognized, substituted, split, merged, or replaced by garbage.
+  - Examples include `1.18` becoming `1 1 8`, `10^{-3}` becoming `1 0^{-3}`, `N_2` becoming `\Nu_2`, `lx` becoming `1x`, a variable becoming `�` or `□`, or `Var` becoming `V a r`.
+  - Include corrupted decimal points, Greek/Latin letter substitutions, wrong OCR lookalikes, repeated garbage characters, and damaged chemical symbols when the input itself supports the corruption.
+  - Do not flag valid Unicode math, legitimate variable naming, harmless LaTeX spacing, or unfamiliar notation.
+  - If an external citation, page number, question number, or word is inserted into a formula, use Formula_Extra_Content instead.
+  - Do not use domain knowledge alone to replace one valid-looking symbol with another.
 
-  ⚠️ **Normal patterns (DO NOT flag)**:
-  - Mixing inline ($...$) and display ($$...$$) formulas
-  - Using \begin{align}...\end{align} within $$...$$
-  - Line breaks with \\ in alignment environments
-  - HTML tags: <sub>x</sub>, <sup>2</sup> for subscripts/superscripts
-  - Mixing LaTeX and HTML in web-extracted content
-  - Plain-text math without any LaTeX (e.g., "a^2 + b^2 = c^2" without $ delimiters) — this is fine as long as the expressions are actually present
-  - A prose passage that merely mentions a result without displaying its derivation
-  - One isolated OCR typo when the mathematical meaning remains clear
+  **Formula_Unparseable** — Broken LaTeX, Markdown, HTML, or MathML syntax prevents a standard parser from reliably identifying or rendering the formula.
+  - Flag unmatched mathematical `$` or `$$` delimiters, unmatched `\(`/`\)` or `\[`/`\]`, missing required braces, mismatched or unclosed `\begin{...}`/`\end{...}` environments, unfinished commands, or unclosed formula-related HTML/MathML tags.
+  - Flag raw LaTeX without math delimiters only when the target is clearly Markdown math and the commands consequently appear as unrendered source text.
+  - Distinguish mathematical dollar delimiters from currency such as `$100` and `$5.99`.
+  - Do not mechanically compare delimiter counts without context. `\left(a,b\right]` may be a valid half-open interval, and `\left.` or `\right.` is a valid invisible delimiter.
+  - Do not flag well-formed `align`, `aligned`, `cases`, matrices, normal `\\` line breaks, or mixed LaTeX/HTML that renders correctly.
+  - If the formula parses but its internal organization is damaged, use Formula_Structure_Corruption. If it parses but is placed or broken across lines incorrectly, use Formula_Layout_Corruption.
 
-  ⚠️ **Important**: Distinguish LaTeX $ from dollar signs ($100)
-  - Dollar sign: "$100", "$5.99" (followed by numbers) → NOT LaTeX
-  - LaTeX delimiter: "$x$", "$\alpha$" (contains math symbols) → IS LaTeX
+  **Formula_Structure_Corruption** — A formula can be parsed or rendered, but its internal hierarchy or component relationships were damaged during extraction.
+  - Flag a multiplicative term moved into an exponent, a numerator and denominator placed incorrectly, reversed or displaced sum/integral limits, an operator with the wrong scope, a subscript attached to the wrong base, or formula fragments placed in the wrong internal order.
+  - Flag damaged matrix rows or columns, lost array separators, corrupted determinants, malformed piecewise branches, or a `cases` expression converted into an unrelated structure such as `\binom`.
+  - Require visible extraction evidence: an internal contradiction with a nearby definition, an intact copy elsewhere in the input, obvious layout reconstruction artifacts, or an unmistakably displaced formula component.
+  - Do not flag a structurally complete statement solely because it is mathematically false, such as `2+2=5`.
+  - Do not flag unusual but valid notation, or rewrite a formula merely because a more familiar form exists.
+  - A single misrecognized character belongs to Formula_Token_Corruption; a missing component belongs to Formula_Partial_Loss; a parser failure belongs to Formula_Unparseable.
 
-  - Example (BAD — broken delimiters): "$x^2 + y^2 is broken here $$a = b$$$"
-    (First LaTeX $ never closes, extra $ at end)
-  - Example (GOOD): "The item costs $100 and satisfies $x^2 + y^2 = z^2$ where price is $50"
-    (Dollar signs for money + proper LaTeX pair)
+  **Formula_Layout_Corruption** — Formula content and internal structure are intact and parseable, but their placement, line breaks, or inline/display relationship with surrounding text is damaged.
+  - Flag an inline formula forced onto its own line when this breaks sentence flow or produces abnormal display.
+  - Flag one continuous equation split into separate math blocks, especially when one block ends with a dangling `+`, `-`, or `=` and the next block continues it.
+  - Flag a display formula flattened into prose, a formula number separated from its formula, a formula moved to the wrong paragraph, or formula explanations placed in the wrong order.
+  - Do not flag intentional display equations, harmless wrapping, normal multiline `align`/`cases`/matrix layouts, or an inline formula that merely wraps visually because of page width.
+  - If a line break damages the delimiters and prevents parsing, use Formula_Unparseable. If unrelated text is inserted, use Formula_Extra_Content.
+
+  **Formula_Extra_Content** — Non-formula content is inserted into a formula or attached to it in a way that forms an incorrect expression.
+  - Flag a stray standalone `latex` token left after formulas, or leaked extractor/HTML markers.
+  - Flag page headers, page footers, journal titles, author names, page numbers, dates, footnotes, captions, navigation, or unrelated prose inserted into a formula or derivation.
+  - Flag citation numbers fused into formula exponents or subscripts, such as citation `[42]` turning `cm^{-1}` into `cm^{-142}`.
+  - Flag question numbers fused into results, such as the next item number `1` turning an unfinished exercise into `145 × 12 = 1`.
+  - Do not flag normal `\tag{3}`, a citation placed cleanly after a closed formula, normal explanatory prose following a formula, legitimate `\text{if}`/`\text{otherwise}`, units, or a document that is genuinely discussing LaTeX.
+  - If there is only a placement or line-break problem and no foreign content was inserted, use Formula_Layout_Corruption.
+
+  **Normal formula patterns (DO NOT flag)**:
+  - Mixing inline `$...$` and display `$$...$$` formulas.
+  - Using `\begin{align}...\end{align}` within `$$...$$`.
+  - Normal `\\` line breaks in alignment, cases, or matrix environments.
+  - Correct formula-related HTML such as `<sub>x</sub>` and `<sup>2</sup>`.
+  - Mixing LaTeX and HTML in web-extracted content when the expressions remain correct and readable.
+  - Plain-text math such as `a^2 + b^2 = c^2` without LaTeX delimiters when the target format allows it and the expression is complete.
+  - A prose passage that mentions a result without displaying its derivation.
+  - An isolated recoverable OCR typo that does not materially affect formula meaning.
 
 - **Table_Corruption**: A clearly intended table whose structure or essential data is damaged
   - Misaligned rows/columns: values can no longer be matched to the correct headers
@@ -246,7 +277,13 @@ For defective text, include all independently supported labels. Do not include a
 
 Allowed score/type/name combinations:
 - `1 / Good / None`
-- `0 / Completeness / Formula_Corruption`
+- `0 / Completeness / Formula_Missing`
+- `0 / Completeness / Formula_Partial_Loss`
+- `0 / Completeness / Formula_Token_Corruption`
+- `0 / Completeness / Formula_Unparseable`
+- `0 / Completeness / Formula_Structure_Corruption`
+- `0 / Completeness / Formula_Layout_Corruption`
+- `0 / Completeness / Formula_Extra_Content`
 - `0 / Completeness / Table_Corruption`
 - `0 / Completeness / Code_Corruption`
 - `0 / Effectiveness / Garbled_Characters`
@@ -293,13 +330,37 @@ Application form
 Payment receipt"
 Output: [{"score": 1, "type": "Good", "name": "None", "reason": "A clear itemized list; list entries do not require sentence-ending punctuation"}]
 
-**Example 2 (Bad - Completeness, broken delimiters)**:
-Input: "The formula $x^2 + y^2 is broken here $$a = b$$$"
-Output: [{"score": 0, "type": "Completeness", "name": "Formula_Corruption", "reason": "Unmatched delimiters: first $ never closes, extra $ at end"}]
+**Example 2 (Bad - Entire Formula Missing)**:
+Input: "The compound has the following structure: [Chemical Formula 1]. In Formula 1, R is hydrogen and n is an integer from 1 to 6."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Missing", "reason": "Only the placeholder '[Chemical Formula 1]' remains, while the following sentence defines variables from the absent structure"}]
 
-**Example 2.5 (Bad - Completeness, stripped math)**:
-Input: "Definition 1.(-solutions) A -solution is a Ricci flow which is -noncollapsed at every scale. Ancient, in the sense that t ranges on the interval ; Bounded curvature, thus ;"
-Output: [{"score": 0, "type": "Completeness", "name": "Formula_Corruption", "reason": "Mathematical symbols systematically stripped: Greek letters removed ('-solutions' instead of 'κ-solutions'), formulas missing after 'the interval' and 'thus'"}]
+**Example 2.1 (Bad - Partial Formula Loss)**:
+Input: "The transition model maps states and actions as $T(s,a,s') [0,1]$, where the output is a probability."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Partial_Loss", "reason": "The mapping relation between T(s,a,s') and [0,1] is missing its arrow"}]
+
+**Example 2.2 (Bad - Formula Token Corruption)**:
+Input: "Nitrogen adsorption was measured using $\Nu_2$. The same gas is referred to as nitrogen throughout the paragraph."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Token_Corruption", "reason": "The nitrogen symbol N is OCR-corrupted into the Greek command \\Nu in the formula \\Nu_2"}]
+
+**Example 2.3 (Bad - Unparseable Formula)**:
+Input: "The formula $x^2 + y^2 is broken here $$a = b$$$"
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Unparseable", "reason": "The first mathematical $ delimiter is never closed and an extra $ remains at the end"}]
+
+**Example 2.4 (Bad - Internal Formula Structure)**:
+Input: "Fuel flow is the product of coefficient μ, nozzle area A, and the square root of pressure difference. The extracted formula is $Q=\mu A^{\sqrt{\Delta P}}$."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Structure_Corruption", "reason": "The nearby definition says the square-root term is multiplied by A, but the extracted formula incorrectly places it in A's exponent"}]
+
+**Example 2.5 (Bad - Formula Layout)**:
+Input: "The value is\n$x+y$\nin this case."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Layout_Corruption", "reason": "The inline formula is forced onto a separate line, breaking the surrounding sentence flow"}]
+
+**Example 2.6 (Bad - Extra Content Around Formula)**:
+Input: "The normalized direction is $x_l=(x_2-x_1)/R$ latex and the next paragraph continues the derivation."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Extra_Content", "reason": "A stray extractor token 'latex' remains attached to the formula"}]
+
+**Example 2.7 (Bad - Independent Formula Defects)**:
+Input: "The material structure is: [Formula 1]. Separately, the energy equation is $E=mc^2$ latex."
+Output: [{"score": 0, "type": "Completeness", "name": "Formula_Missing", "reason": "The material structure is absent and only '[Formula 1]' remains"}, {"score": 0, "type": "Completeness", "name": "Formula_Extra_Content", "reason": "A separate valid energy formula is followed by the stray extractor token 'latex'"}]
 
 **Example 3 (Bad - Garbled Characters)**:
 Input: "The exported text contains broken symbols â€™ â€œ □□□ ï»¿ throughout the paragraph."
@@ -326,4 +387,3 @@ Output: [{"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": 
 # Input content to evaluate:
 
 """
-
