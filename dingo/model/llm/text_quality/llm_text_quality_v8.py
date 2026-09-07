@@ -184,29 +184,69 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
   - A passage that references a table outside the provided sample without visible evidence of extraction loss.
   - A syntactically valid, structurally coherent table containing unusual values; table labels evaluate extraction and representation, not factual truth.
 
-- **Code_Corruption**: Recognizable source code whose formatting or syntax tokens were damaged during extraction
-  **Common corruption patterns**:
-  - Missing code fence (` ``` `): a multi-line code block appears as prose and its boundaries are unclear
-  - Lost indentation: Python/YAML code with all indentation stripped (flat lines)
-  - Broken identifiers: spaces injected into tokens, e.g. `sys .argv`, `pts .append`, `i[ 0]`
-  - Line numbers mixed with code, broken syntax highlighting markers
-  - Keywords wrapped in inline backticks instead of a fenced block, e.g. `` `import` sys ``
+- **Code quality labels**: Evaluate extraction or representation defects in source code, scripts, configuration, JSON, XML, and similar machine-readable snippets. Do not evaluate whether well-formed code is logically correct, efficient, secure, or runnable in the current environment.
 
-  Example (BAD — indentation and identifiers destroyed):
-  ```
-  `import` sys
-  pts = []
-  for i in range( 1,len(sys .argv), 2):
-  pts .append([int(sys .argv[i]), int(sys .argv[i +1])])
-  ```
-  Correct version would have a code fence, proper indentation, and no spaces inside `sys.argv`.
+  **Shared code policy**:
+  - Use only evidence visible in the input. Do not reconstruct source code from external knowledge or preferred coding style.
+  - A defect must be explicit and materially affect parsing, tokenization, block structure, or the boundary between code and surrounding content.
+  - For one damaged span, return the single label that most directly describes the defect. Do not report the same truncated statement, broken delimiter, or inserted line number under several labels.
+  - Multiple code labels are allowed only for independent defects, such as corrupted operators in one listing and IDE annotations inserted into a separate function.
+  - A compiler error alone is not extraction evidence. Undefined variables, missing dependencies, logical bugs, deprecated APIs, and incomplete project context are outside these labels.
 
-  - Impact: Teaches incorrect code syntax, broken tokenization patterns, and wrong indentation conventions
+  **Code_Missing** — An entire code, script, configuration, or program listing that should visibly be present is absent.
+  - Flag when "the code is shown below", "example implementation", or a similar introduction is followed by no code before the next section or the end of the sample.
+  - Flag when only a listing number, caption, language marker, empty code container, output, or variable explanation remains while the referenced code is absent.
+  - Flag a missing program in an exercise that explicitly asks the reader to analyze that program's output.
+  - Do not flag external repository references, intentionally omitted implementations, prose that merely discusses an algorithm, or a code listing outside the provided sample.
+  - If meaningful code remains, use Code_Partial_Loss. If the code remains but its fence, whitespace, or placement is damaged, use Code_Layout_Corruption.
 
-  ⚠️ **DO NOT flag**:
-  - Short inline code, commands, identifiers, stack traces, or configuration fragments that remain readable
-  - Code shown without a fence when indentation, boundaries, and syntax are still intact
-  - Logical bugs, deprecated APIs, inefficient algorithms, or style violations; this label evaluates extraction corruption, not program correctness
+  **Code_Unparseable** — Structural syntax boundaries are damaged so the relevant language parser cannot reliably build strings, expressions, statements, tags, or blocks.
+  - Flag unmatched or wrongly nested quotes, parentheses, brackets, braces, tags, or language-specific block delimiters.
+  - Flag malformed JSON escapes such as `\u00b`, broken JSON separators, malformed XML declarations, unclosed XML tags, or corrupted attribute quotes.
+  - Flag code ending inside an unfinished string, expression, function call, tag, or other structural construct.
+  - Do not mechanically count delimiters; account for comments, strings, escapes, language syntax, and intentionally partial examples.
+  - If a specific wrong keyword, identifier, operator, or character visibly remains, use Code_Token_Corruption. If a substantial program tail is absent, use Code_Partial_Loss.
+  - Do not flag code that parses but has runtime, type, dependency, API, or logical errors.
+
+  **Code_Partial_Loss** — Recognizable code remains, but a meaningful function, statement, declaration, branch, loop, return path, or contiguous program portion has been removed.
+  - Flag a function or program truncated inside nested control flow, especially when references or the next document section begin before the required closing logic.
+  - Flag a listing that starts with local statements while its function signature, parameters, or necessary opening portion is visibly missing.
+  - Flag a missing implementation phase, subgroup of configuration entries, program tail, or return logic when the surviving code explicitly shows the gap.
+  - Do not flag deliberate `...`, `pass`, `TODO`, pseudocode, core-algorithm excerpts, diffs, or documented omission.
+  - If the entire listing is absent, use Code_Missing. If only a structural delimiter is broken, use Code_Unparseable. If erroneous tokens remain in place of missing content, use Code_Token_Corruption.
+
+  **Code_Token_Corruption** — Keywords, identifiers, operators, numbers, string characters, paths, escapes, or other lexical tokens are misrecognized, substituted, split, fused, or replaced by garbage.
+  - Flag `int` becoming `at`, `-=` becoming `μ=`, MATLAB `[~, EEG]` becoming `[-, EEG]`, or an identifier acquiring unrelated characters.
+  - Flag spaces removed between a function and its argument, such as `(setq ss ...)` becoming `(setqss ...)`, or spaces injected inside identifiers, paths, and operators.
+  - Flag corrupted decimal points, prefixes, array indices, command names, quotation characters, and long repetitive garbage strings such as `UUUU...` when they replace code tokens.
+  - Require visible OCR or extraction evidence, such as an intact occurrence elsewhere, a consistent local pattern, or unmistakable garbage characters.
+  - If lost line breaks merge complete statements or comments, use Code_Layout_Corruption. If foreign markup, line numbers, or UI text is inserted, use Code_Extra_Content.
+  - Do not flag unconventional but valid naming, Unicode identifiers, unfamiliar domain syntax, or a token suspected to be wrong only from outside knowledge.
+
+  **Code_Layout_Corruption** — Code tokens and statements largely remain, but line breaks, indentation, fences, comment boundaries, block order, or placement relative to prose is damaged.
+  - Flag lost line breaks that cause `//` comments to swallow later declarations or statements.
+  - Flag a preprocessor directive or continuation split across lines so that its meaning changes, such as `#define name` separated from its value.
+  - Flag indentation loss in Python, YAML, Makefiles, or other indentation-sensitive formats when block hierarchy can no longer be recovered.
+  - Flag a wrapped MATLAB comment whose continuation loses `%` and becomes code, or a code listing split into disconnected blocks or interleaved with prose.
+  - Flag missing fences only when code/prose boundaries or code structure become unclear; a fence is not mandatory by itself.
+  - Do not flag valid minified code, harmless wrapping, alternate brace style, normal continuation syntax, or code in a recognizable `<pre>`, `<code>`, or extractor-specific code container.
+  - If substantive code is absent, use Code_Partial_Loss. If foreign content is inserted into code, use Code_Extra_Content.
+
+  **Code_Extra_Content** — Line numbers, IDE annotations, question text, LaTeX markup, page artifacts, extractor markers, or other content not belonging to the program is inserted into code.
+  - Flag IDE text such as `1 usage` or `3 references` embedded beside a function definition.
+  - Flag PDF line numbers copied into code tokens, or a subsequent exam question inserted before the current function or loop closes.
+  - Flag LaTeX wrappers such as `$...$`, `\mathtt{...}`, or `\equiv` injected into assignments, identifiers, or code punctuation.
+  - Flag page headers, page footers, storage URLs, image placeholders, navigation, captions, or unrelated program fragments inserted into a listing.
+  - Do not flag legitimate comments, docstrings, license headers, clearly separated display line numbers, REPL or shell prompts, debug output, or code that intentionally demonstrates LaTeX/HTML/Markdown syntax.
+  - If the material after a mathematical formula is only a stray `latex` token, use Formula_Extra_Content rather than a code label.
+  - If valid code lines are excessively repeated, use the existing Duplication label; do not invent Code_Duplication.
+
+  **Normal code patterns (DO NOT flag)**:
+  - Readable code without Markdown fences when its boundaries, indentation, and syntax remain clear.
+  - Short inline code, commands, identifiers, stack traces, configuration fragments, diffs, REPL sessions, and pseudocode used appropriately.
+  - Valid compact or minified code, unconventional formatting, Unicode identifiers, and language-specific syntax.
+  - A snippet that is not a complete project and therefore lacks imports, dependencies, surrounding declarations, tests, or runtime context.
+  - Logical bugs, deprecated APIs, insecure practices, style violations, inefficient algorithms, or code that does not produce the intended result without visible extraction damage.
 
 **Key Question**: "Can the model learn proper formatting from this structure?"
 
@@ -355,7 +395,12 @@ Allowed score/type/name combinations:
 - `0 / Completeness / Table_Structure_Corruption`
 - `0 / Completeness / Table_Layout_Corruption`
 - `0 / Completeness / Table_Extra_Content`
-- `0 / Completeness / Code_Corruption`
+- `0 / Completeness / Code_Missing`
+- `0 / Completeness / Code_Unparseable`
+- `0 / Completeness / Code_Partial_Loss`
+- `0 / Completeness / Code_Token_Corruption`
+- `0 / Completeness / Code_Layout_Corruption`
+- `0 / Completeness / Code_Extra_Content`
 - `0 / Effectiveness / Garbled_Characters`
 - `0 / Effectiveness / Words_Stuck`
 - `0 / Effectiveness / Lack_Punctuation`
@@ -403,6 +448,13 @@ Output: [{"score": 1, "type": "Good", "name": "None", "reason": "A clear itemize
 **Example 1.9 (Good - Valid Multilevel Table)**:
 Input: "<table><tr><th rowspan='2'>Region</th><th colspan='2'>Sales</th></tr><tr><th>2023</th><th>2024</th></tr><tr><td>North</td><td>120</td><td>135</td></tr></table>"
 Output: [{"score": 1, "type": "Good", "name": "None", "reason": "The multilevel header and merged cells form a valid, recoverable table structure"}]
+
+**Example 1.10 (Good - Readable Code Without Fences)**:
+Input: "def total(values):
+    return sum(values)
+
+print(total([1, 2, 3]))"
+Output: [{"score": 1, "type": "Good", "name": "None", "reason": "The Python code has clear boundaries, valid indentation, and intact syntax even without a Markdown fence"}]
 
 **Example 2 (Bad - Entire Formula Missing)**:
 Input: "The compound has the following structure: [Chemical Formula 1]. In Formula 1, R is hydrogen and n is an integer from 1 to 6."
@@ -467,6 +519,50 @@ Output: [{"score": 0, "type": "Completeness", "name": "Table_Layout_Corruption",
 **Example 2.15 (Bad - Extra Content in Table)**:
 Input: "<table><tr><th>Document</th><th>Date</th></tr><tr><td>Invoice 1158</td><td><img src='s3://internal-bucket/page-4.jpg'/></td></tr></table>"
 Output: [{"score": 0, "type": "Completeness", "name": "Table_Extra_Content", "reason": "An internal S3 image-storage URL is inserted in the Date cell as if it were table data"}]
+
+**Example 2.16 (Bad - Entire Code Missing)**:
+Input: "Example implementation:\nListing 3.2\nThe function accepts a path and returns the parsed records.\n\n4. Evaluation"
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Missing", "reason": "Only the listing caption and function description remain before the next section; the promised implementation is absent"}]
+
+**Example 2.17 (Bad - Unparseable Code)**:
+Input:
+```json
+{"name": "\u00b", "enabled": true}
+```
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Unparseable", "reason": "The JSON value contains the invalid Unicode escape \\u00b, which does not provide the required four hexadecimal digits"}]
+
+**Example 2.18 (Bad - Partial Code Loss)**:
+Input:
+```matlab
+function result = positive_total(x)
+result = 0;
+for i = 1:length(x)
+    if x(i) > 0
+        result = result + x(i);
+References
+```
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Partial_Loss", "reason": "The function is truncated inside nested control flow and the References section begins before the remaining logic and closing end statements"}]
+
+**Example 2.19 (Bad - Code Token Corruption)**:
+Input:
+```c
+static unsigned short lfsr = 0xffff;
+at i, outbyte;
+```
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Token_Corruption", "reason": "The C keyword int is visibly OCR-corrupted into the invalid token 'at' before the variable declaration"}]
+
+**Example 2.20 (Bad - Code Layout)**:
+Input: "int number1 = 1; // first value int number2 = 2; // second value\nint sum = number1 + number2;"
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Layout_Corruption", "reason": "A lost line break places the number2 declaration inside the preceding // comment, changing the code structure"}]
+
+**Example 2.21 (Bad - Extra Content in Code)**:
+Input:
+```python
+def borrow_book():
+    1 usage
+    return library.pop()
+```
+Output: [{"score": 0, "type": "Completeness", "name": "Code_Extra_Content", "reason": "The IDE annotation '1 usage' is inserted inside the function as if it were Python code"}]
 
 **Example 3 (Bad - Garbled Characters)**:
 Input: "The exported text contains broken symbols â€™ â€œ □□□ ï»¿ throughout the paragraph."

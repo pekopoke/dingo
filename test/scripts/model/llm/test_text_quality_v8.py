@@ -53,6 +53,27 @@ def test_v8_prompt_uses_detailed_table_labels_in_expected_order():
     assert label_positions == sorted(label_positions)
 
 
+def test_v8_prompt_uses_detailed_code_labels_in_expected_order():
+    code_labels = [
+        "Code_Missing",
+        "Code_Unparseable",
+        "Code_Partial_Loss",
+        "Code_Token_Corruption",
+        "Code_Layout_Corruption",
+        "Code_Extra_Content",
+    ]
+
+    assert "**Code_Corruption**" not in LLMTextQualityV8.prompt
+    assert "`0 / Completeness / Code_Corruption`" not in LLMTextQualityV8.prompt
+    assert "`0 / Completeness / Code_Indentation_Corruption`" not in LLMTextQualityV8.prompt
+    assert "`0 / Completeness / Code_Duplication`" not in LLMTextQualityV8.prompt
+    label_positions = []
+    for label in code_labels:
+        label_positions.append(LLMTextQualityV8.prompt.index(f"**{label}**"))
+        assert f"`0 / Completeness / {label}`" in LLMTextQualityV8.prompt
+    assert label_positions == sorted(label_positions)
+
+
 def test_v8_aggregates_multiple_defects():
     response = json.dumps([
         {"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": "Missing spaces"},
