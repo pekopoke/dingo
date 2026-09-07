@@ -22,7 +22,6 @@ class TestSummaryModel:
     def test_input_args_are_serialized(self):
         input_args = InputArgs(**{
             "input_path": "data.jsonl",
-            "exclude_fields": [],
             "evaluator": [{
                 "fields": {"content": "content"},
                 "evals": [{
@@ -41,7 +40,7 @@ class TestSummaryModel:
         serialized = summary.to_dict()["input_args"]
         assert serialized["input_path"] == "data.jsonl"
         assert serialized["evaluator"][0]["evals"][0]["config"]["model"] == "test-model"
-        assert serialized["evaluator"][0]["evals"][0]["config"]["key"] == "secret-key"
+        assert "key" not in serialized["evaluator"][0]["evals"][0]["config"]
 
     def test_input_args_to_dict_recursively_excludes_fields(self):
         input_args = InputArgs(**{
@@ -266,6 +265,41 @@ class TestSummaryModel:
 
         # 验证没有分数统计字段
         assert "metrics_score" not in result
+
+    def test_to_dict_sorts_type_mappings_by_key(self):
+        summary = SummaryModel(
+            type_count={
+                "response": {"Similarity.Duplication": 2},
+                "content": {
+                    "Security.Prohibition": 1,
+                    "Completeness.Formula_Missing": 3,
+                    "Effectiveness.Words_Stuck": 2,
+                },
+            },
+            type_ratio={
+                "response": {"Similarity.Duplication": 0.2},
+                "content": {
+                    "Security.Prohibition": 0.1,
+                    "Completeness.Formula_Missing": 0.3,
+                    "Effectiveness.Words_Stuck": 0.2,
+                },
+            },
+        )
+
+        result = summary.to_dict()
+
+        assert list(result["type_count"]) == ["content", "response"]
+        assert list(result["type_count"]["content"]) == [
+            "Completeness.Formula_Missing",
+            "Effectiveness.Words_Stuck",
+            "Security.Prohibition",
+        ]
+        assert list(result["type_ratio"]) == ["content", "response"]
+        assert list(result["type_ratio"]["content"]) == [
+            "Completeness.Formula_Missing",
+            "Effectiveness.Words_Stuck",
+            "Security.Prohibition",
+        ]
 
     def test_add_token_usage_and_to_dict(self):
         """测试 LLM token 使用量统计输出"""
