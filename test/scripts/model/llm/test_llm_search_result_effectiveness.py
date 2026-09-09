@@ -67,6 +67,7 @@ def test_llm_penalty_requires_exact_evidence(monkeypatch, evidence, expected):
                                  'chunk': 'damaged � word', '_source_quality': 1})
     assert grade.chunk_score == expected
 
+
 def _mojibake(value: str) -> str:
     return value.encode("utf-8").decode("latin-1")
 

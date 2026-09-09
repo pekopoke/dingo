@@ -62,12 +62,13 @@ def test_agentic_local_executor_integration_without_network(tmp_path, monkeypatc
     from dingo.config import InputArgs
     from dingo.exec import Executor
     from dingo.io.output.eval_detail import EvalDetail
-    from dingo.model.llm.llm_search_result_relevance import LLMSearchResultRelevance
-    from dingo.model.llm.llm_search_result_effectiveness import LLMSearchResultEffectiveness
     from dingo.model.llm.llm_search_result_authority import LLMSearchResultAuthority
+    from dingo.model.llm.llm_search_result_effectiveness import LLMSearchResultEffectiveness
+    from dingo.model.llm.llm_search_result_relevance import LLMSearchResultRelevance
 
     monkeypatch.setenv("LOCAL_DEPLOYMENT_MODE", "true")
     invoked = []
+
     def evaluate(cls, data):
         assert data.search_result["_eval_profile"] == "agentic"
         assert data.search_result["chunk"] == "evidence"

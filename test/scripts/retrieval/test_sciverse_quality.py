@@ -38,6 +38,7 @@ def test_strict_prefix_preserves_punctuation_and_only_normalizes_line_endings():
 
 def test_source_request_retains_original_evidence(monkeypatch):
     from types import SimpleNamespace
+
     from dingo.retrieval.sciverse_quality import SciverseQualityEnricher
 
     enricher = SciverseQualityEnricher(api_url="https://example.invalid/agentic-search", api_token="test")
@@ -58,10 +59,12 @@ def test_source_request_retains_original_evidence(monkeypatch):
 
 def test_empty_window_is_not_replaced_by_offset_zero(monkeypatch):
     from types import SimpleNamespace
+
     from dingo.retrieval.sciverse_quality import SciverseQualityEnricher
 
     enricher = SciverseQualityEnricher(api_url="https://example.invalid", api_token="test")
     calls = []
+
     def get_content(doc_id, offset, limit):
         calls.append(offset)
         return SimpleNamespace(status_code=200, json=lambda: {"text": "", "chars_returned": 10})

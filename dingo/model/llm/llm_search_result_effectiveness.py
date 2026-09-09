@@ -58,6 +58,7 @@ def _supported_text_evidence(fragment: str, text: str) -> bool:
         return False
     return bool(visible_fragment.strip()) and visible_fragment in visible_text
 
+
 RULE_SPECIAL_CHARACTER_PATTERNS = (
     r"u200e",
     r"&#247;|\? :",

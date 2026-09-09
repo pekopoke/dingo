@@ -30,8 +30,8 @@ from search_result_eval_utils import (add_common_args, get_title, load_queries, 
 from dingo.config import InputArgs  # noqa: E402
 from dingo.exec import Executor  # noqa: E402
 from dingo.model.llm.llm_search_result_relevance import is_doi_query  # noqa: E402
-from dingo.retrieval.search_client import PaperResult, create_client  # noqa: E402
 from dingo.retrieval.sciverse_quality import SciverseQualityEnricher  # noqa: E402
+from dingo.retrieval.search_client import PaperResult, create_client  # noqa: E402
 
 EFFECTIVENESS_LABEL_TO_ISSUE = {
     "Effectiveness.Error_Title_Miss": "missing_title",

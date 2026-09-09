@@ -148,6 +148,7 @@ class RetrievalExecutor:
             explicit_dir=None,
             default_prefix=os.path.join(self.input_args.output_path, ra.backend),
         )
+
         def _search_item(index_item: tuple[int, dict[str, Any]]):
             index, item = index_item
             response = client.search(item["query"], limit=ra.limit)
@@ -361,6 +362,7 @@ class RetrievalExecutor:
     def _execute_mteb(self) -> SummaryModel:
         """Standard MTEB closed-eval path, optionally followed by open eval."""
         import mteb
+
         from dingo.retrieval.mteb_adapter import SearchClientModel
 
         task_names = [

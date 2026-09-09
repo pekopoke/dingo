@@ -1,7 +1,6 @@
 """Sciverse source and metadata enrichment for subjective search evaluation."""
 
 from __future__ import annotations
-
 import html
 import re
 import threading
@@ -13,7 +12,6 @@ from typing import Any, Iterable
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
 
 AUTHORITY_FIELDS = (
     "doc_id",

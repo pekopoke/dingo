@@ -3,7 +3,6 @@
 import re
 from pathlib import Path
 
-
 _TASK_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 

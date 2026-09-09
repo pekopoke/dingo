@@ -80,6 +80,8 @@ def test_agentic_relevance_uses_query_relevance_only(monkeypatch):
     assert detail.score == 0.9
     assert detail.reason[0]["judge_overall_score"] == 0.4
     assert detail.reason[0]["score_basis"] == "query_relevance"
+
+
 def test_meta_and_agentic_select_different_relevance_evidence():
     from dingo.model.llm.llm_search_result_relevance import LLMSearchResultRelevance
     result = {"abstract": "paper abstract", "chunk": "retrieved evidence"}
