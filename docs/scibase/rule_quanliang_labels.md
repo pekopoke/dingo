@@ -89,17 +89,17 @@
 | `missing_field` | 字段缺失 | 检查输入对象中是否存在 `title` 字段。 |
 | `null` | 值为 null | 检查字段值是否为 `null`。 |
 | `wrong_type` | 字段类型错误 | 值的类型不是字符串时标记。 |
-| `html_tag_layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
-| `html_tag_math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
-| `html_tag_xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
-| `html_tag_cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
-| `html_entity_named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
-| `html_entity_decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
-| `html_entity_hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
-| `special_char_invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
-| `special_char_replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
-| `special_char_control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
-| `special_char_markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
+| `html_tag.layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
+| `html_tag.math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
+| `html_tag.xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
+| `html_tag.cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
+| `html_entity.named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
+| `html_entity.decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
+| `html_entity.hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
+| `special_char.invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
+| `special_char.replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
+| `special_char.control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
+| `special_char.markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
 | `empty` | 值为空 | 若去除首尾空格后内容为空，则标记。 |
 | `too_short` | 内容过短 | 若去除首尾空格后长度小于 5 个字符，则标记。 |
 | `too_long` | 内容过长 | 若去除首尾空格后长度大于 1000 个字符，则标记。 |
@@ -115,17 +115,17 @@
 | `missing_field` | 字段缺失 | 检查输入对象中是否存在 `abstract` 字段。 |
 | `null` | 值为 null | 检查字段值是否为 `null`。 |
 | `wrong_type` | 字段类型错误 | 值的类型不是字符串时标记。 |
-| `html_tag_layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
-| `html_tag_math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
-| `html_tag_xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
-| `html_tag_cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
-| `html_entity_named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
-| `html_entity_decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
-| `html_entity_hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
-| `special_char_invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
-| `special_char_replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
-| `special_char_control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
-| `special_char_markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
+| `html_tag.layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
+| `html_tag.math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
+| `html_tag.xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
+| `html_tag.cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
+| `html_entity.named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
+| `html_entity.decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
+| `html_entity.hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
+| `special_char.invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
+| `special_char.replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
+| `special_char.control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
+| `special_char.markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
 | `empty` | 值为空 | 若去除首尾空格后内容为空，则标记。 |
 | `too_short` | 内容过短 | 若去除首尾空格后长度小于 20 个字符，则标记。 |
 | `too_long` | 内容过长 | 若去除首尾空格后长度大于 6000 个字符，则标记。 |
