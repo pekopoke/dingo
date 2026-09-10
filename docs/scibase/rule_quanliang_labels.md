@@ -12,7 +12,7 @@
 | `doi` | 6 |
 | `isbns` | 4 |
 | `isbn13` | 4 |
-| `title` | 21 |
+| `title` | 36 |
 | `abstract` | 21 |
 | `language` | 4 |
 | `author` | 10 |
@@ -41,7 +41,7 @@
 | `access_xinghe_repository_origin_path` | 3 |
 | `access_xinghe_repository_model_name` | 4 |
 | `access_xinghe_repository_model_version` | 5 |
-| **合计** | **237** |
+| **合计** | **252** |
 
 ## metadata_type
 
@@ -92,17 +92,32 @@
 | `empty` | 值为空 | 若去除首尾空格后内容为空，则标记。 |
 | `too_short` | 内容过短 | 若去除首尾空格后长度小于 5 个字符，则标记。 |
 | `too_long` | 内容过长 | 若去除首尾空格后长度大于 1000 个字符，则标记。 |
-| `html_tag.layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
-| `html_tag.math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
+| `html_tag.formatting` | 包含普通排版标签 | 包含普通行内排版标签，如 `<i>`、`<b>`、`<strong>`、`<em>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
+| `html_tag.structure` | 包含结构或换行标签 | 包含结构、布局或换行标签，如 `<p>`、`<div>`、`<span>`、`<br>`，包括闭合标签和带属性的标签。 |
+| `html_tag.link` | 包含链接标签 | 包含 `<a>`、`<ext-link>` 等链接标签，包括闭合标签、带属性的标签及对应命名空间形式。 |
+| `html_tag.media` | 包含媒体标签 | 包含 `<img>`、`<graphic>`、`<inline-graphic>` 等图片或媒体节点，包括带属性的标签及对应命名空间形式。 |
+| `html_tag.namespaced` | 包含命名空间标签 | 包含 `jats:`、`ns数字:`、`xhtml:` 等命名空间前缀的 XML/JATS 标签；MathML 标签优先归入 `html_tag.math`。 |
 | `html_tag.xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
 | `html_tag.cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
+| `html_tag.sub_sup` | 包含上下标标签 | 包含 `<sub>`、`<sup>` 上下标标签，包括闭合标签和带属性的标签。 |
+| `html_tag.math` | 包含 MathML 或公式标签 | 包含 `<math>`、`<mml:math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>`、`<inline-formula>`、`<TEX>` 等公式容器或节点。 |
+| `html_tag.incomplete` | HTML/XML 标签残缺 | 标签缺少 `<` 或 `>`、内容被截断，或 XML 注释、CDATA 等结构不完整时标记。 |
+| `html_tag.mismatched` | HTML/XML 标签错配 | 开闭标签不匹配、只有单侧标签、标签交叉嵌套，或出现 `<math>...</tex>` 等结构错配时标记。 |
 | `html_entity.named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
 | `html_entity.decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
 | `html_entity.hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
-| `special_char.invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
+| `markup_tag.formatting` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sub]`、`[!sup]`、`[!/sup]`、`[!]` 等非标准方括号排版标记。 |
+| `markup_tag.crawler` | 包含方括号爬虫标记 | 包含 `[○!R]`、`[○!上]`、`[○!下]` 等已确认的 `[○!...]` 形式爬虫残留。 |
 | `special_char.replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
 | `special_char.control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
-| `special_char.markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
+| `special_char.private_use_area` | 包含 Unicode 私用区字符 | 包含 Unicode 基本多文种平面私用区 U+E000～U+F8FF 中的字符。 |
+| `invisible_char.zero_width_space` | 包含零宽空格 | 包含零宽空格 U+200B。 |
+| `invisible_char.bom` | 包含 BOM 字符 | 字段内容中包含 U+FEFF；该字符位于文本内部时通常是残留的 BOM 或零宽不换行空格。 |
+| `invisible_char.zwnj` | 包含零宽不连字符 | 包含 ZWNJ（U+200C）。 |
+| `invisible_char.zwj` | 包含零宽连字符 | 包含 ZWJ（U+200D）。 |
+| `invisible_char.bidi_control` | 包含双向控制符 | 包含 U+200E、U+200F、U+202A～U+202E、U+2066～U+2069 等双向文本控制字符。 |
+| `space_char.nbsp` | 包含不换行空格 | 包含 NBSP（U+00A0）。 |
+| `space_char.typographic` | 包含排版空格 | 包含 U+2000～U+200A、U+202F、U+205F、U+3000 等排版或全角空格。 |
 | `likely_placeholder` | 疑似占位内容 | 标题去除首尾空白并忽略大小写后，等于预设占位值，如 `untitled`、`[no title]`、`unknown`、`n/a`、`null`、`tbd`、`-` 或 `.`。 |
 | `encoding_error` | 编码错误 | 包含常见乱码模式，如 `�`、`锟斤拷`、`烫烫烫`、`屯屯屯`、以 `Ã`/`Â` 开头的双字节乱码、`â€™` 或 `ï»¿`。 |
 | `likely_conference` | 疑似会议名称 | 标题以可选年份加 `IEEE` 开头，并包含 `proceedings`、`conference`、`symposium`、`workshop` 或 `congress`。 |
