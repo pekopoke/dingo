@@ -164,7 +164,21 @@ class TestRuleQuanliangFieldValidation:
 
         result = model.eval(Data(title=value, abstract=value))
 
-        expected_error_labels = [
+        expected_title_labels = [
+            "title.html_tag.formatting",
+            "title.html_tag.xml_comment",
+            "title.html_tag.cdata",
+            "title.html_tag.math",
+            "title.html_entity.named",
+            "title.html_entity.decimal",
+            "title.html_entity.hex",
+            "title.markup_tag.formatting",
+            "title.special_char.replacement",
+            "title.special_char.control",
+            "title.invisible_char.zero_width_space",
+            "title.encoding_error",
+        ]
+        expected_abstract_error_labels = [
             "html_tag_layout",
             "html_tag_math",
             "html_tag_xml_comment",
@@ -179,17 +193,105 @@ class TestRuleQuanliangFieldValidation:
         ]
         assert result.status is True
         assert result.label == [
-            *(f"title.{error_label}" for error_label in expected_error_labels),
-            "title.encoding_error",
-            *(f"abstract.{error_label}" for error_label in expected_error_labels),
+            *expected_title_labels,
+            *(f"abstract.{error_label}" for error_label in expected_abstract_error_labels),
             "abstract.encoding_error",
             "abstract.same_title",
         ]
 
+    def test_title_expanded_markup_and_unicode_labels(self):
+        cases = [
+            ("A study of <i>formatted</i> text", ["title.html_tag.formatting"]),
+            ("<p>A structured title</p>", ["title.html_tag.structure"]),
+            ("<a href='https://example.com'>Linked title</a>", ["title.html_tag.link"]),
+            ("Image <inline-graphic href='x'/> in title", ["title.html_tag.media"]),
+            (
+                "<jats:custom>Namespaced title</jats:custom>",
+                ["title.html_tag.namespaced"],
+            ),
+            ("A title <!-- note --> with comment", ["title.html_tag.xml_comment"]),
+            ("A title <![CDATA[with data]]> section", ["title.html_tag.cdata"]),
+            ("Water H<sub>2</sub>O analysis", ["title.html_tag.sub_sup"]),
+            (
+                "<mml:math><mml:mi>x</mml:mi></mml:math> equation",
+                ["title.html_tag.math"],
+            ),
+            ("A title with <strong", ["title.html_tag.incomplete"]),
+            ("A title with /i> missing opener", ["title.html_tag.incomplete"]),
+            ("A title with <!-- broken comment", ["title.html_tag.incomplete"]),
+            ("A title with <![CDATA[broken data", ["title.html_tag.incomplete"]),
+            (
+                "A title with <i>one-sided markup",
+                ["title.html_tag.formatting", "title.html_tag.mismatched"],
+            ),
+            (
+                "A title with <i>broken</b>",
+                ["title.html_tag.formatting", "title.html_tag.mismatched"],
+            ),
+            ("Named entity &amp; in title", ["title.html_entity.named"]),
+            ("Decimal entity &#160; in title", ["title.html_entity.decimal"]),
+            ("Hex entity &#xA0; in title", ["title.html_entity.hex"]),
+            ("A [!i]formatted[!/i] title", ["title.markup_tag.formatting"]),
+            ("A title with [○!R] residue", ["title.markup_tag.crawler"]),
+            (
+                "A title with � replacement",
+                ["title.special_char.replacement", "title.encoding_error"],
+            ),
+            ("A title with \x08 control", ["title.special_char.control"]),
+            ("A title with \ue000 private use", ["title.special_char.private_use_area"]),
+            ("A title with \u200b zero width", ["title.invisible_char.zero_width_space"]),
+            ("A title with \ufeff BOM", ["title.invisible_char.bom"]),
+            ("A title with \u200c ZWNJ", ["title.invisible_char.zwnj"]),
+            ("A title with \u200d ZWJ", ["title.invisible_char.zwj"]),
+            ("A title with \u202e bidi control", ["title.invisible_char.bidi_control"]),
+            ("A title with \u00a0 NBSP", ["title.space_char.nbsp"]),
+            ("A title with \u2003 typographic space", ["title.space_char.typographic"]),
+        ]
+
+        for title, expected_labels in cases:
+            model = RuleQuanliangFieldValidation()
+            model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+            model.dynamic_config.key_list = ["title"]
+
+            result = model.eval(Data(title=title))
+
+            assert result.status is True, title
+            assert result.label == expected_labels, title
+
+    def test_title_namespaced_link_reports_both_relevant_labels(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = ["title"]
+
+        result = model.eval(Data(title="<jats:ext-link>Linked title</jats:ext-link>"))
+
+        assert result.label == [
+            "title.html_tag.link",
+            "title.html_tag.namespaced",
+        ]
+
+    def test_title_bibliographic_angle_brackets_are_not_html(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = ["title"]
+
+        for title in (
+            "Collected <Articles> from the archive",
+            "A concise <Introduction> to metadata",
+            "<The> collected scientific works",
+            "Symphony number one <sound recording>",
+        ):
+            result = model.eval(Data(title=title))
+            assert result.status is False, title
+            assert result.label == ["QUALITY_GOOD"], title
+
     def test_title_quality_labels(self):
         cases = [
+            (None, ["title.null"]),
             ("   ", ["title.empty"]),
+            ("\u00a0", ["title.space_char.nbsp", "title.empty"]),
             ("Test", ["title.too_short"]),
+            ("A" * 1001, ["title.too_long"]),
             ("N/A", ["title.too_short", "title.likely_placeholder"]),
             ("This title contains 锟斤拷 encoding noise", ["title.encoding_error"]),
             (
@@ -216,6 +318,7 @@ class TestRuleQuanliangFieldValidation:
             "IEEE Transactions on Knowledge and Data Engineering",
             "Lessons from the Conference on Machine Learning",
             "https://example.com A Study of Machine Learning",
+            "Research at https://example.com/i> remains valid",
         ):
             result = model.eval(Data(title=title))
             assert result.status is False
@@ -324,7 +427,7 @@ class TestRuleQuanliangFieldValidation:
         result = model.eval(Data(title="<i>A</i> <i>B</i> &amp; &amp; \u200b"))
 
         assert result.reason == [
-            'title: contains HTML layout tag: ["<i>", "</i>"]',
+            'title: contains HTML formatting tag: ["<i>", "</i>"]',
             'title: contains named HTML entity: ["&amp;"]',
-            'title: contains invisible unicode character: ["\\u200b"]',
+            'title: contains zero-width space: ["\\u200b"]',
         ]
