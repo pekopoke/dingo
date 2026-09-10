@@ -13,7 +13,7 @@
 | `isbns` | 4 |
 | `isbn13` | 4 |
 | `title` | 36 |
-| `abstract` | 21 |
+| `abstract` | 45 |
 | `language` | 4 |
 | `author` | 10 |
 | `contributors` | 4 |
@@ -41,7 +41,7 @@
 | `access_xinghe_repository_origin_path` | 3 |
 | `access_xinghe_repository_model_name` | 4 |
 | `access_xinghe_repository_model_version` | 5 |
-| **合计** | **252** |
+| **合计** | **276** |
 
 ## metadata_type
 
@@ -133,17 +133,41 @@
 | `empty` | 值为空 | 若去除首尾空格后内容为空，则标记。 |
 | `too_short` | 内容过短 | 若去除首尾空格后长度小于 20 个字符，则标记。 |
 | `too_long` | 内容过长 | 若去除首尾空格后长度大于 6000 个字符，则标记。 |
-| `html_tag.layout` | 包含 HTML 排版标签 | 包含 HTML 排版标签，如 `<i>`、`<b>`、`<p>`、`<br>`、`<sup>`、`<sub>`、`<em>`、`<strong>`、`<span>`、`<div>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
-| `html_tag.math` | 包含 MathML 标签 | 包含 MathML 标签，如 `<math>`、`<mrow>`、`<mi>`、`<mn>`、`<mo>`、`<msub>`、`<msup>`、`<mfrac>`、`<msqrt>` 等，也匹配 `mml:` 前缀。 |
+| `html_tag.formatting` | 包含普通排版标签 | 包含普通行内排版标签，如 `<i>`、`<b>`、`<strong>`、`<em>`、`<u>`、`<scp>`、`<tt>`，包括闭合标签和带属性的标签。 |
+| `html_tag.structure` | 包含结构或布局标签 | 包含 `<p>`、`<br>`、`<div>`、`<span>`、`<h1>`～`<h6>`、`<pre>`、列表及表格等 HTML 结构标签。 |
+| `html_tag.link` | 包含链接标签 | 包含 `<a>`、无命名空间的 `<ext-link>`、`<xref>` 等链接或交叉引用标签。 |
+| `html_tag.media` | 包含媒体或不可展示节点 | 包含 `<img>`、`<inline-graphic>`、`<graphic>`、`<iframe>` 等媒体或不可直接展示的节点。 |
+| `html_tag.jats` | 包含 JATS 标签 | 包含 `<jats:p>`、`<jats:title>`、`<jats:sec>`、`<jats:xref>` 等 `jats:` 前缀标签；此类标签统一归入本标签，不再重复归入结构、链接或其他命名空间标签。 |
+| `html_tag.namespaced` | 包含其他命名空间标签 | 包含 `<jats1:...>`、`<ns0:...>`、`<ns3:...>`、`<xhtml:...>` 等其他 XML 命名空间标签；`jats:` 和 `mml:` 分别归入 JATS 与公式标签。 |
 | `html_tag.xml_comment` | 包含 XML 注释 | 包含 XML/HTML 注释片段，如 `<!-- comment -->`。 |
 | `html_tag.cdata` | 包含 CDATA 内容 | 包含 CDATA 区段，如 `<![CDATA[...]]>`。 |
+| `html_tag.xml_declaration` | 包含 XML 声明 | 包含 `<?xml ...?>` 形式的 XML 声明。 |
+| `html_tag.doctype` | 包含 DOCTYPE | 包含 `<!DOCTYPE ...>` 形式的 HTML/XML 文档类型声明。 |
+| `html_tag.sub_sup` | 包含上下标标签 | 包含 `<sub>`、`<sup>` 上下标标签，包括闭合标签和带属性的标签。 |
+| `html_tag.math` | 包含 MathML 或公式标签 | 包含 `<math>`、`<mml:math>`、MathML 子节点、`<inline-formula>`、`<disp-formula>`、`<TEX>` 等公式容器或节点。 |
+| `html_tag.incomplete` | HTML/XML 标签残缺 | 标签缺少 `<` 或 `>`、内容被截断，或 XML 注释、CDATA 等结构不完整时标记。 |
+| `html_tag.mismatched` | HTML/XML 标签错配 | 开闭标签不匹配、只有单侧标签、跨段或交叉嵌套，以及公式容器开闭标签不一致时标记。 |
 | `html_entity.named` | 包含命名 HTML 实体 | 包含 `&名称;` 形式的命名 HTML 实体，如 `&nbsp;`、`&amp;`。 |
 | `html_entity.decimal` | 包含十进制 HTML 实体 | 包含 `&#数字;` 形式的十进制 HTML 实体，如 `&#160;`。 |
 | `html_entity.hex` | 包含十六进制 HTML 实体 | 包含 `&#x十六进制;` 形式的 HTML 实体，如 `&#xA0;`。 |
-| `special_char.invisible` | 包含不可见字符 | 包含 U+2000～U+200F、U+202F、U+205F、U+3000、U+FEFF、U+00A0 或 U+2060～U+206F 中的不可见字符或特殊空白。 |
+| `markup_tag.formatting` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sub]`、`[!sup]`、`[!/sup]`、`[!]` 等非标准方括号排版标记。 |
+| `markup_tag.crawler` | 包含方括号爬虫标记 | 包含 `[○!R]`、`[○!上]`、`[○!下]` 等已确认的 `[○!...]` 形式爬虫残留。 |
+| `crawler_residue.etx` | 包含文本形式的 ETX | 包含 `<ETX>`、`<<ETX>>` 等可见的结束控制占位符；本标签不用于真正的 U+0003 控制字符。 |
+| `crawler_residue.navigation` | 包含页面导航文本 | 包含 `<Previous page \| Next page>` 等已确认的分页或页面导航残留。 |
+| `crawler_residue.template` | 包含页面模板文本 | 包含已确认的下载提示、页面栏目或其他站点模板文本。 |
 | `special_char.replacement` | 包含 Unicode 替换字符 | 包含 Unicode 替换字符 `�`（U+FFFD）。 |
 | `special_char.control` | 包含控制字符 | 包含 U+0000～U+0008、U+000B、U+000C、U+000E～U+001F 或 U+007F；TAB、换行和回车不在此标签范围内。 |
-| `special_char.markup` | 包含方括号排版标记 | 包含 `[!i]`、`[!/i]`、`[!sub]`、`[!/sup]`、`[!]`、`[○!R]`、`[○!上]`、`[○!下]` 等标记。 |
+| `special_char.private_use_area` | 包含 Unicode 私用区字符 | 包含 Unicode 基本多文种平面私用区 U+E000～U+F8FF 中的字符。 |
+| `invisible_char.zero_width_space` | 包含零宽空格 | 包含零宽空格 U+200B。 |
+| `invisible_char.bom` | 包含 BOM 字符 | 字段内容中包含 U+FEFF；该字符位于文本内部时通常是残留的 BOM 或零宽不换行空格。 |
+| `invisible_char.soft_hyphen` | 包含软连字符 | 包含软连字符 U+00AD。 |
+| `invisible_char.zwnj` | 包含零宽不连字符 | 包含 ZWNJ（U+200C）。 |
+| `invisible_char.zwj` | 包含零宽连字符 | 包含 ZWJ（U+200D）。 |
+| `invisible_char.bidi_control` | 包含双向控制符 | 包含 U+200E、U+200F、U+202A～U+202E、U+2066～U+2069 等双向文本控制字符。 |
+| `space_char.nbsp` | 包含不换行空格 | 包含 NBSP（U+00A0）。 |
+| `space_char.typographic` | 包含排版空格 | 包含 U+2000～U+200A、U+202F、U+205F、U+3000 等排版或全角空格。 |
+| `space_char.tab` | 包含 TAB | 包含 TAB（U+0009）字符。 |
+| `space_char.excessive_line_break` | 换行过多 | LF、CR 或 CRLF 的数量、连续次数或文本占比超过配置阈值时标记；不因单个合法换行产生标签。 |
 | `likely_placeholder` | 疑似占位内容 | 摘要去除首尾空白并忽略大小写后，等于 `n/a`、`none`、`null`、`unknown`、`-` 等，或匹配 `no abstract available`、`abstract not provided`、`unavailable` 等提示语。 |
 | `encoding_error` | 编码错误 | 包含常见乱码模式，如 `�`、`锟斤拷`、`烫烫烫`、`屯屯屯`、以 `Ã`/`Â` 开头的双字节乱码、`â€™` 或 `ï»¿`。 |
 | `same_title` | 内容与标题重复 | 摘要与字符串类型的非空标题去除首尾空白并忽略大小写后完全相同。 |
