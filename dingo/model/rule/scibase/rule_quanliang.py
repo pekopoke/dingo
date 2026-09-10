@@ -38,8 +38,8 @@ SPECIAL_CHAR_MARKUP_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Title uses a finer-grained taxonomy than abstract and nested reference titles.
-# Keep the legacy patterns above unchanged for those other fields.
+# Nested reference titles still use the legacy flat taxonomy above. Title and
+# abstract each have an independent, field-specific hierarchical taxonomy below.
 TITLE_HTML_TAG_FORMATTING_RE = re.compile(
     r"<\s*/?\s*(?:(?:jats|ns\d+|xhtml):)?(?:i|b|strong|em|u|scp|tt)"
     r"(?=[\s/>])[^>]*>",
@@ -211,6 +211,187 @@ ABSTRACT_IDENTIFIER_RE = re.compile(
     r"(?:https?://|www\.|s3a?://)\S+)",
     re.IGNORECASE,
 )
+
+# Abstract tag types are intentionally independent from title tag types. In
+# particular, exact ``jats:`` tags are classified only as ``html_tag.jats`` and
+# exact ``mml:`` tags are classified only as ``html_tag.math``.
+ABSTRACT_HTML_TAG_FORMATTING_RE = re.compile(
+    r"<\s*/?\s*(?:i|b|strong|em|u|scp|tt)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_STRUCTURE_RE = re.compile(
+    r"<\s*/?\s*(?:p|br|div|span|h[1-6]|pre|blockquote|ul|ol|li|dl|dt|dd|"
+    r"table|thead|tbody|tfoot|tr|th|td|caption|section|article|header|footer|"
+    r"main|nav|aside|figure|figcaption|hr|details|summary)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_LINK_RE = re.compile(
+    r"<\s*/?\s*(?:a|ext-link|xref)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_MEDIA_RE = re.compile(
+    r"<\s*/?\s*(?:img|inline-graphic|graphic|iframe|picture|video|audio|"
+    r"source|track|object|embed|canvas|svg)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_JATS_RE = re.compile(
+    r"<\s*/?\s*jats:[A-Za-z_][\w.-]*(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_NAMESPACED_RE = re.compile(
+    r"<\s*/?\s*(?!(?:jats|mml):)[A-Za-z_][\w.-]*:[A-Za-z_][\w.-]*"
+    r"(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_XML_DECLARATION_RE = re.compile(
+    r"<\?xml\b[\s\S]*?\?>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_DOCTYPE_RE = re.compile(
+    r"<!DOCTYPE\b[\s\S]*?>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_SUB_SUP_RE = re.compile(
+    r"<\s*/?\s*(?:sub|sup)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_HTML_TAG_MATH_RE = re.compile(
+    r"<\s*/?\s*(?:mml:[A-Za-z_][\w.-]*|math|mrow|mi|mn|mo|ms|mtext|mspace|"
+    r"msub|msup|msubsup|mfrac|msqrt|mroot|mtable|mtr|mtd|mfenced|munderover|"
+    r"munder|mover|inline-formula|disp-formula|tex|tex-math)(?=[\s/>])[^>]*>",
+    re.IGNORECASE,
+)
+ABSTRACT_MARKUP_TAG_FORMATTING_RE = re.compile(
+    r"\[(?:!\s*/?\s*(?:i|sub|sup)\s*|!)\]",
+    re.IGNORECASE,
+)
+ABSTRACT_MARKUP_TAG_CRAWLER_RE = re.compile(r"\[○![^\]\r\n]+\]", re.IGNORECASE)
+ABSTRACT_CRAWLER_ETX_RE = re.compile(r"<<\s*ETX\s*>>|<\s*ETX\s*>", re.IGNORECASE)
+ABSTRACT_CRAWLER_NAVIGATION_RE = re.compile(
+    r"<\s*previous\s+page\s*\|\s*next\s+page\s*>",
+    re.IGNORECASE,
+)
+ABSTRACT_CRAWLER_TEMPLATE_RE = re.compile(
+    r"(?im)^[ \t]*(?:download\s+(?:the\s+)?(?:pdf|full\s+text)|"
+    r"view\s+(?:the\s+)?full\s+text|click\s+here\s+to\s+(?:download|view)|"
+    r"skip\s+to\s+main\s+content|back\s+to\s+top)[ \t]*[.!]?[ \t]*$"
+)
+ABSTRACT_CHARACTER_RE = re.compile(
+    r"[\x00-\x09\x0B\x0C\x0E-\x1F\x7F\u00A0\u00AD\u2000-\u200F"
+    r"\u202A-\u202F\u205F\u2066-\u2069\u3000\uE000-\uF8FF\uFEFF\uFFFD]"
+)
+
+_ABSTRACT_FORMATTING_TAG_NAMES = {"i", "b", "strong", "em", "u", "scp", "tt"}
+_ABSTRACT_STRUCTURE_TAG_NAMES = {
+    "p", "br", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "pre",
+    "blockquote", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody",
+    "tfoot", "tr", "th", "td", "caption", "section", "article", "header", "footer",
+    "main", "nav", "aside", "figure", "figcaption", "hr", "details", "summary",
+}
+_ABSTRACT_LINK_TAG_NAMES = {"a", "ext-link", "xref"}
+_ABSTRACT_MEDIA_TAG_NAMES = {
+    "img", "inline-graphic", "graphic", "iframe", "picture", "video", "audio", "source",
+    "track", "object", "embed", "canvas", "svg",
+}
+_ABSTRACT_SUB_SUP_TAG_NAMES = {"sub", "sup"}
+_ABSTRACT_MATH_TAG_NAMES = {
+    "math", "mrow", "mi", "mn", "mo", "ms", "mtext", "mspace", "msub", "msup",
+    "msubsup", "mfrac", "msqrt", "mroot", "mtable", "mtr", "mtd", "mfenced",
+    "munderover", "munder", "mover", "inline-formula", "disp-formula", "tex", "tex-math",
+}
+_ABSTRACT_KNOWN_LOCAL_TAG_NAMES = (
+    _ABSTRACT_FORMATTING_TAG_NAMES
+    | _ABSTRACT_STRUCTURE_TAG_NAMES
+    | _ABSTRACT_LINK_TAG_NAMES
+    | _ABSTRACT_MEDIA_TAG_NAMES
+    | _ABSTRACT_SUB_SUP_TAG_NAMES
+    | _ABSTRACT_MATH_TAG_NAMES
+)
+_ABSTRACT_VOID_TAG_NAMES = {
+    "area", "base", "br", "col", "embed", "graphic", "hr", "img", "inline-graphic",
+    "input", "link", "meta", "param", "source", "track", "wbr",
+}
+_ABSTRACT_LOCAL_TAG_PATTERN = "|".join(
+    sorted(
+        (re.escape(name) for name in _ABSTRACT_KNOWN_LOCAL_TAG_NAMES),
+        key=lambda name: (-len(name), name),
+    )
+)
+_ABSTRACT_RECOGNIZED_TAG_NAME_PATTERN = (
+    rf"(?:[A-Za-z_][\w.-]*:[A-Za-z_][\w.-]*|(?:{_ABSTRACT_LOCAL_TAG_PATTERN}))"
+)
+ABSTRACT_RECOGNIZED_TAG_START_RE = re.compile(
+    rf"<\s*/?\s*{_ABSTRACT_RECOGNIZED_TAG_NAME_PATTERN}(?=[\s/>]|$)",
+    re.IGNORECASE,
+)
+ABSTRACT_RECOGNIZED_COMPLETE_TAG_RE = re.compile(
+    rf"<\s*(?P<closing>/?)\s*(?P<name>{_ABSTRACT_RECOGNIZED_TAG_NAME_PATTERN})"
+    rf"(?=[\s/>])(?P<attributes>[^>]*)>",
+    re.IGNORECASE,
+)
+ABSTRACT_CLOSING_TAG_WITHOUT_OPEN_BRACKET_RE = re.compile(
+    rf"(?<![\w:/<])/\s*{_ABSTRACT_RECOGNIZED_TAG_NAME_PATTERN}\s*>",
+    re.IGNORECASE,
+)
+
+_ABSTRACT_TAG_PATTERN_CHECKS = (
+    (ABSTRACT_HTML_TAG_FORMATTING_RE, "html_tag.formatting", "contains HTML formatting tag"),
+    (ABSTRACT_HTML_TAG_STRUCTURE_RE, "html_tag.structure", "contains HTML structure tag"),
+    (ABSTRACT_HTML_TAG_LINK_RE, "html_tag.link", "contains HTML/XML link tag"),
+    (ABSTRACT_HTML_TAG_MEDIA_RE, "html_tag.media", "contains HTML/XML media tag"),
+    (ABSTRACT_HTML_TAG_JATS_RE, "html_tag.jats", "contains JATS tag"),
+    (ABSTRACT_HTML_TAG_NAMESPACED_RE, "html_tag.namespaced", "contains namespaced XML tag"),
+    (HTML_TAG_XML_COMMENT_RE, "html_tag.xml_comment", "contains XML comment"),
+    (HTML_TAG_CDATA_RE, "html_tag.cdata", "contains CDATA section"),
+    (
+        ABSTRACT_HTML_TAG_XML_DECLARATION_RE,
+        "html_tag.xml_declaration",
+        "contains XML declaration",
+    ),
+    (ABSTRACT_HTML_TAG_DOCTYPE_RE, "html_tag.doctype", "contains DOCTYPE declaration"),
+    (ABSTRACT_HTML_TAG_SUB_SUP_RE, "html_tag.sub_sup", "contains subscript or superscript tag"),
+    (ABSTRACT_HTML_TAG_MATH_RE, "html_tag.math", "contains MathML or formula tag"),
+)
+_ABSTRACT_ENTITY_PATTERN_CHECKS = (
+    (HTML_ENTITY_NAMED_RE, "html_entity.named", "contains named HTML entity"),
+    (HTML_ENTITY_DECIMAL_RE, "html_entity.decimal", "contains decimal HTML entity"),
+    (HTML_ENTITY_HEX_RE, "html_entity.hex", "contains hexadecimal HTML entity"),
+)
+_ABSTRACT_MARKUP_PATTERN_CHECKS = (
+    (ABSTRACT_MARKUP_TAG_FORMATTING_RE, "markup_tag.formatting", "contains bracket formatting token"),
+    (ABSTRACT_MARKUP_TAG_CRAWLER_RE, "markup_tag.crawler", "contains crawler markup token"),
+)
+_ABSTRACT_CRAWLER_PATTERN_CHECKS = (
+    (ABSTRACT_CRAWLER_ETX_RE, "crawler_residue.etx", "contains visible ETX token"),
+    (
+        ABSTRACT_CRAWLER_NAVIGATION_RE,
+        "crawler_residue.navigation",
+        "contains page navigation residue",
+    ),
+    (
+        ABSTRACT_CRAWLER_TEMPLATE_RE,
+        "crawler_residue.template",
+        "contains page template residue",
+    ),
+)
+_ABSTRACT_CHARACTER_CHECKS = (
+    ("special_char.replacement", "contains unicode replacement character"),
+    ("special_char.control", "contains control character"),
+    ("special_char.private_use_area", "contains unicode private-use character"),
+    ("invisible_char.zero_width_space", "contains zero-width space"),
+    ("invisible_char.bom", "contains BOM character"),
+    ("invisible_char.soft_hyphen", "contains soft hyphen"),
+    ("invisible_char.zwnj", "contains ZWNJ character"),
+    ("invisible_char.zwj", "contains ZWJ character"),
+    ("invisible_char.bidi_control", "contains bidirectional control character"),
+    ("space_char.nbsp", "contains non-breaking space"),
+    ("space_char.typographic", "contains typographic space"),
+    ("space_char.tab", "contains TAB character"),
+)
+ABSTRACT_CONSECUTIVE_LINE_BREAK_THRESHOLD = 3
+ABSTRACT_LINE_BREAK_COUNT_THRESHOLD = 20
+ABSTRACT_LINE_BREAK_DENSITY_MIN_COUNT = 5
+ABSTRACT_LINE_BREAK_DENSITY_THRESHOLD = 0.05
 PAGE_RANGE_RE = re.compile(r"^\d+-\d+$")
 ISSN_RE = re.compile(r"^\d{4}-\d{3}[\dX]$")
 AUTHOR_SEP_RE = re.compile(r"[|;；]|,,|，，")
@@ -502,12 +683,13 @@ def check_isbn13(isbn13: Any, metadata_type: Any) -> ValidationResult:
     return _ok()
 
 
-def _check_html_and_special_chars(value: Any) -> ValidationResult:
-    if value is None:
+def _check_inner_title(title: Any) -> ValidationResult:
+    """Check the inner title in references, related_works, and citations."""
+    if title is None:
         return _fail("null", "value is null")
-    if not isinstance(value, str):
+    if not isinstance(title, str):
         return _fail("wrong_type", "value must be a string")
-    if value == "":
+    if title == "":
         return _ok()
 
     error_labels: List[str] = []
@@ -530,15 +712,11 @@ def _check_html_and_special_chars(value: Any) -> ValidationResult:
         (SPECIAL_CHAR_MARKUP_RE, "special_char_markup", "contains bracket markup token"),
     ]
     for pattern, error_label, reason in pattern_checks:
-        matched_values = list(dict.fromkeys(match.group(0) for match in pattern.finditer(value)))
+        matched_values = list(dict.fromkeys(match.group(0) for match in pattern.finditer(title)))
         if matched_values:
             error_labels.append(error_label)
             reasons.append(f"{reason}: {json.dumps(matched_values, ensure_ascii=True)}")
     return bool(error_labels), error_labels, reasons
-
-
-def _distinct_pattern_matches(pattern: re.Pattern[str], value: str) -> list[str]:
-    return list(dict.fromkeys(match.group(0) for match in pattern.finditer(value)))
 
 
 def _detect_title_incomplete_tags(value: str) -> list[str]:
@@ -641,14 +819,16 @@ def _collect_title_character_matches(value: str) -> dict[str, list[str]]:
     return matches
 
 
-def _check_title_patterns(
+def _check_pattern_group(
     value: str,
     pattern_checks: tuple[tuple[re.Pattern[str], str, str], ...],
 ) -> ValidationResult:
     error_labels: List[str] = []
     reasons: List[str] = []
     for pattern, error_label, reason in pattern_checks:
-        matched_values = _distinct_pattern_matches(pattern, value)
+        matched_values = list(
+            dict.fromkeys(match.group(0) for match in pattern.finditer(value))
+        )
         if matched_values:
             error_labels.append(error_label)
             reasons.append(f"{reason}: {json.dumps(matched_values, ensure_ascii=True)}")
@@ -658,7 +838,7 @@ def _check_title_patterns(
 def _check_title_tag_types(value: str) -> ValidationResult:
     if "<" not in value:
         return _ok()
-    return _check_title_patterns(value, _TITLE_TAG_PATTERN_CHECKS)
+    return _check_pattern_group(value, _TITLE_TAG_PATTERN_CHECKS)
 
 
 def _check_title_tag_integrity(value: str) -> ValidationResult:
@@ -688,13 +868,13 @@ def _check_title_tag_integrity(value: str) -> ValidationResult:
 def _check_title_entities(value: str) -> ValidationResult:
     if "&" not in value:
         return _ok()
-    return _check_title_patterns(value, _TITLE_ENTITY_PATTERN_CHECKS)
+    return _check_pattern_group(value, _TITLE_ENTITY_PATTERN_CHECKS)
 
 
 def _check_title_markup_tags(value: str) -> ValidationResult:
     if "[" not in value:
         return _ok()
-    return _check_title_patterns(value, _TITLE_MARKUP_PATTERN_CHECKS)
+    return _check_pattern_group(value, _TITLE_MARKUP_PATTERN_CHECKS)
 
 
 def _check_title_unicode_chars(value: str) -> ValidationResult:
@@ -773,48 +953,274 @@ def check_title(title: Any) -> ValidationResult:
     return _combine_validation_results(results)
 
 
+def _detect_abstract_incomplete_tags(value: str) -> list[str]:
+    # Complete non-element XML sections are handled by their own labels and must
+    # not influence element-boundary checks.
+    scan_value = HTML_TAG_XML_COMMENT_RE.sub("", value)
+    scan_value = HTML_TAG_CDATA_RE.sub("", scan_value)
+    scan_value = ABSTRACT_HTML_TAG_XML_DECLARATION_RE.sub("", scan_value)
+    scan_value = ABSTRACT_HTML_TAG_DOCTYPE_RE.sub("", scan_value)
+    evidence: list[str] = []
+
+    for match in ABSTRACT_RECOGNIZED_TAG_START_RE.finditer(scan_value):
+        closing_bracket = scan_value.find(">", match.end())
+        search_end = closing_bracket if closing_bracket >= 0 else len(scan_value)
+        next_opening_bracket = scan_value.find("<", match.end(), search_end)
+        if closing_bracket < 0 or next_opening_bracket >= 0:
+            fragment_end = next_opening_bracket if next_opening_bracket >= 0 else len(scan_value)
+            evidence.append(scan_value[match.start():fragment_end])
+
+    for match in ABSTRACT_CLOSING_TAG_WITHOUT_OPEN_BRACKET_RE.finditer(scan_value):
+        if not re.search(r"<\s*$", scan_value[:match.start()]):
+            evidence.append(match.group(0))
+
+    comment_remainder = HTML_TAG_XML_COMMENT_RE.sub("", value)
+    if "<!--" in comment_remainder:
+        evidence.append("<!--")
+    if "-->" in comment_remainder:
+        evidence.append("-->")
+
+    cdata_remainder = HTML_TAG_CDATA_RE.sub("", value)
+    if "<![cdata[" in cdata_remainder.lower():
+        evidence.append("<![CDATA[")
+    if "]]>" in cdata_remainder:
+        evidence.append("]]>")
+
+    declaration_remainder = ABSTRACT_HTML_TAG_XML_DECLARATION_RE.sub("", value)
+    if re.search(r"<\?xml\b", declaration_remainder, re.IGNORECASE):
+        evidence.append("<?xml")
+    if "?>" in declaration_remainder:
+        evidence.append("?>")
+
+    doctype_remainder = ABSTRACT_HTML_TAG_DOCTYPE_RE.sub("", value)
+    if re.search(r"<!DOCTYPE\b", doctype_remainder, re.IGNORECASE):
+        evidence.append("<!DOCTYPE")
+
+    return list(dict.fromkeys(fragment for fragment in evidence if fragment))
+
+
+def _detect_abstract_mismatched_tags(value: str) -> list[str]:
+    scan_value = HTML_TAG_XML_COMMENT_RE.sub("", value)
+    scan_value = HTML_TAG_CDATA_RE.sub("", scan_value)
+    scan_value = ABSTRACT_HTML_TAG_XML_DECLARATION_RE.sub("", scan_value)
+    scan_value = ABSTRACT_HTML_TAG_DOCTYPE_RE.sub("", scan_value)
+    stack: list[tuple[str, str]] = []
+    evidence: list[str] = []
+
+    for match in ABSTRACT_RECOGNIZED_COMPLETE_TAG_RE.finditer(scan_value):
+        raw_tag = match.group(0)
+        tag_name = match.group("name").lower()
+        local_name = tag_name.rsplit(":", 1)[-1]
+        is_closing = bool(match.group("closing"))
+        is_self_closing = match.group("attributes").rstrip().endswith("/")
+
+        if local_name in _ABSTRACT_VOID_TAG_NAMES:
+            if is_closing:
+                evidence.append(raw_tag)
+            continue
+        if is_closing:
+            if stack and stack[-1][0] == tag_name:
+                stack.pop()
+            else:
+                if stack:
+                    evidence.append(stack[-1][1])
+                evidence.append(raw_tag)
+            continue
+        if not is_self_closing:
+            stack.append((tag_name, raw_tag))
+
+    evidence.extend(raw_tag for _, raw_tag in stack)
+    return list(dict.fromkeys(evidence))
+
+
+def _collect_abstract_character_matches(value: str) -> dict[str, list[str]]:
+    matches: dict[str, list[str]] = {}
+    seen: dict[str, set[str]] = {}
+    for match in ABSTRACT_CHARACTER_RE.finditer(value):
+        char = match.group(0)
+        codepoint = ord(char)
+        error_label = ""
+        if codepoint == 0xFFFD:
+            error_label = "special_char.replacement"
+        elif codepoint <= 0x08 or codepoint in (0x0B, 0x0C, 0x7F) or 0x0E <= codepoint <= 0x1F:
+            error_label = "special_char.control"
+        elif 0xE000 <= codepoint <= 0xF8FF:
+            error_label = "special_char.private_use_area"
+        elif codepoint == 0x200B:
+            error_label = "invisible_char.zero_width_space"
+        elif codepoint == 0xFEFF:
+            error_label = "invisible_char.bom"
+        elif codepoint == 0x00AD:
+            error_label = "invisible_char.soft_hyphen"
+        elif codepoint == 0x200C:
+            error_label = "invisible_char.zwnj"
+        elif codepoint == 0x200D:
+            error_label = "invisible_char.zwj"
+        elif codepoint in (0x200E, 0x200F) or 0x202A <= codepoint <= 0x202E or 0x2066 <= codepoint <= 0x2069:
+            error_label = "invisible_char.bidi_control"
+        elif codepoint == 0x00A0:
+            error_label = "space_char.nbsp"
+        elif 0x2000 <= codepoint <= 0x200A or codepoint in (0x202F, 0x205F, 0x3000):
+            error_label = "space_char.typographic"
+        elif codepoint == 0x09:
+            error_label = "space_char.tab"
+
+        if error_label and char not in seen.setdefault(error_label, set()):
+            seen[error_label].add(char)
+            matches.setdefault(error_label, []).append(char)
+    return matches
+
+
+def _abstract_line_break_stats(value: str) -> tuple[int, int, float]:
+    line_breaks = list(re.finditer(r"\r\n|\r|\n", value))
+    longest_run = 0
+    current_run = 0
+    previous_end: int | None = None
+    for line_break in line_breaks:
+        gap = value[previous_end:line_break.start()] if previous_end is not None else ""
+        current_run = current_run + 1 if previous_end is None or not gap.strip(" \t") else 1
+        longest_run = max(longest_run, current_run)
+        previous_end = line_break.end()
+    count = len(line_breaks)
+    return count, longest_run, count / max(len(value), 1)
+
+
+def _check_abstract_tag_types(value: str) -> ValidationResult:
+    if "<" not in value:
+        return _ok()
+    return _check_pattern_group(value, _ABSTRACT_TAG_PATTERN_CHECKS)
+
+
+def _check_abstract_tag_integrity(value: str) -> ValidationResult:
+    if "<" not in value and ">" not in value:
+        return _ok()
+
+    error_labels: List[str] = []
+    reasons: List[str] = []
+    incomplete_tags = _detect_abstract_incomplete_tags(value)
+    if incomplete_tags:
+        error_labels.append("html_tag.incomplete")
+        reasons.append(
+            "contains incomplete HTML/XML tag: "
+            f"{json.dumps(incomplete_tags, ensure_ascii=True)}"
+        )
+    if "<" in value:
+        mismatched_tags = _detect_abstract_mismatched_tags(value)
+        if mismatched_tags:
+            error_labels.append("html_tag.mismatched")
+            reasons.append(
+                "contains mismatched HTML/XML tag: "
+                f"{json.dumps(mismatched_tags, ensure_ascii=True)}"
+            )
+    return bool(error_labels), error_labels, reasons
+
+
+def _check_abstract_entities(value: str) -> ValidationResult:
+    if "&" not in value:
+        return _ok()
+    return _check_pattern_group(value, _ABSTRACT_ENTITY_PATTERN_CHECKS)
+
+
+def _check_abstract_markup_tags(value: str) -> ValidationResult:
+    if "[" not in value:
+        return _ok()
+    return _check_pattern_group(value, _ABSTRACT_MARKUP_PATTERN_CHECKS)
+
+
+def _check_abstract_crawler_residue(value: str) -> ValidationResult:
+    return _check_pattern_group(value, _ABSTRACT_CRAWLER_PATTERN_CHECKS)
+
+
+def _check_abstract_unicode_chars(value: str) -> ValidationResult:
+    character_matches = _collect_abstract_character_matches(value)
+    error_labels: List[str] = []
+    reasons: List[str] = []
+    for error_label, reason in _ABSTRACT_CHARACTER_CHECKS:
+        matched_values = character_matches.get(error_label, [])
+        if matched_values:
+            error_labels.append(error_label)
+            reasons.append(f"{reason}: {json.dumps(matched_values, ensure_ascii=True)}")
+
+    line_break_count, longest_run, line_break_density = _abstract_line_break_stats(value)
+    excessive_line_breaks = (
+        longest_run >= ABSTRACT_CONSECUTIVE_LINE_BREAK_THRESHOLD
+        or line_break_count > ABSTRACT_LINE_BREAK_COUNT_THRESHOLD
+        or (
+            line_break_count >= ABSTRACT_LINE_BREAK_DENSITY_MIN_COUNT
+            and line_break_density > ABSTRACT_LINE_BREAK_DENSITY_THRESHOLD
+        )
+    )
+    if excessive_line_breaks:
+        error_labels.append("space_char.excessive_line_break")
+        reasons.append(
+            "contains excessive line breaks: "
+            f"count={line_break_count}, longest_run={longest_run}, "
+            f"density={line_break_density:.4f}"
+        )
+    return bool(error_labels), error_labels, reasons
+
+
+def _check_abstract_non_empty_content(
+    abstract: str,
+    abstract_trim: str,
+    title: Any,
+) -> ValidationResult:
+    error_labels: List[str] = []
+    reasons: List[str] = []
+    abstract_lower = abstract_trim.lower()
+
+    if len(abstract_trim) < 20:
+        error_labels.append("too_short")
+        reasons.append("trimmed content length is less than 20")
+    if len(abstract_trim) > 6000:
+        error_labels.append("too_long")
+        reasons.append("trimmed content length is greater than 6000")
+    if (
+        abstract_lower in ABSTRACT_PLACEHOLDER_VALUES
+        or ABSTRACT_PLACEHOLDER_RE.fullmatch(abstract_trim)
+    ):
+        error_labels.append("likely_placeholder")
+        reasons.append("content is a likely abstract placeholder")
+    if ABSTRACT_ENCODING_ERROR_RE.search(abstract):
+        error_labels.append("encoding_error")
+        reasons.append("content contains a likely encoding error")
+    if (
+        isinstance(title, str)
+        and title.strip()
+        and abstract_lower == title.strip().lower()
+    ):
+        error_labels.append("same_title")
+        reasons.append("content is identical to title after trimming and lowercasing")
+    if ABSTRACT_IDENTIFIER_RE.fullmatch(abstract_trim):
+        error_labels.append("likely_identifier")
+        reasons.append("content consists only of an identifier or URL")
+    return bool(error_labels), error_labels, reasons
+
+
 def check_abstract(abstract: Any, title: Any = None) -> ValidationResult:
     if abstract is None:
         return _fail("null", "value is null")
     if not isinstance(abstract, str):
         return _fail("wrong_type", "value must be a string")
 
-    invalid, error_labels, reasons = _check_html_and_special_chars(abstract)
     abstract_trim = abstract.strip()
-    abstract_lower = abstract_trim.lower()
-
     if abstract_trim == "":
-        error_labels.append("empty")
-        reasons.append("value is empty after trimming")
+        results = [
+            _check_abstract_unicode_chars(abstract),
+            _fail("empty", "value is empty after trimming"),
+        ]
     else:
-        if len(abstract_trim) < 20:
-            error_labels.append("too_short")
-            reasons.append("trimmed content length is less than 20")
-        if len(abstract_trim) > 6000:
-            error_labels.append("too_long")
-            reasons.append("trimmed content length is greater than 6000")
-        if (
-            abstract_lower in ABSTRACT_PLACEHOLDER_VALUES
-            or ABSTRACT_PLACEHOLDER_RE.fullmatch(abstract_trim)
-        ):
-            error_labels.append("likely_placeholder")
-            reasons.append("content is a likely abstract placeholder")
-        if ABSTRACT_ENCODING_ERROR_RE.search(abstract):
-            error_labels.append("encoding_error")
-            reasons.append("content contains a likely encoding error")
-        if (
-            isinstance(title, str)
-            and abstract_trim
-            and title.strip()
-            and abstract_lower == title.strip().lower()
-        ):
-            error_labels.append("same_title")
-            reasons.append("content is identical to title after trimming and lowercasing")
-        if ABSTRACT_IDENTIFIER_RE.fullmatch(abstract_trim):
-            error_labels.append("likely_identifier")
-            reasons.append("content consists only of an identifier or URL")
+        results = [
+            _check_abstract_tag_types(abstract),
+            _check_abstract_tag_integrity(abstract),
+            _check_abstract_entities(abstract),
+            _check_abstract_markup_tags(abstract),
+            _check_abstract_crawler_residue(abstract),
+            _check_abstract_unicode_chars(abstract),
+            _check_abstract_non_empty_content(abstract, abstract_trim, title),
+        ]
 
-    return invalid or bool(error_labels), error_labels, reasons
+    return _combine_validation_results(results)
 
 
 def check_language(language: Any) -> ValidationResult:
@@ -1142,7 +1548,7 @@ def _check_id_type_id_title_items(items: Any) -> ValidationResult:
         title = item.get("title")
         if not isinstance(id_type, str) or id_type == "":
             return _fail("empty", f"item[{idx}].id_type must be a non-empty string")
-        title_invalid, title_error_labels, title_reasons = _check_html_and_special_chars(title)
+        title_invalid, title_error_labels, title_reasons = _check_inner_title(title)
         if title_invalid:
             return (
                 True,

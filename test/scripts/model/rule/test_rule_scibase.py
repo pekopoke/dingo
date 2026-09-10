@@ -179,17 +179,17 @@ class TestRuleQuanliangFieldValidation:
             "title.encoding_error",
         ]
         expected_abstract_error_labels = [
-            "html_tag_layout",
-            "html_tag_math",
-            "html_tag_xml_comment",
-            "html_tag_cdata",
-            "html_entity_named",
-            "html_entity_decimal",
-            "html_entity_hex",
-            "special_char_invisible",
-            "special_char_replacement",
-            "special_char_control",
-            "special_char_markup",
+            "html_tag.formatting",
+            "html_tag.xml_comment",
+            "html_tag.cdata",
+            "html_tag.math",
+            "html_entity.named",
+            "html_entity.decimal",
+            "html_entity.hex",
+            "markup_tag.formatting",
+            "special_char.replacement",
+            "special_char.control",
+            "invisible_char.zero_width_space",
         ]
         assert result.status is True
         assert result.label == [
@@ -326,8 +326,12 @@ class TestRuleQuanliangFieldValidation:
 
     def test_abstract_quality_labels(self):
         cases = [
+            (None, "Different title", ["abstract.null"]),
+            (123, "Different title", ["abstract.wrong_type"]),
             ("", "Different title", ["abstract.empty"]),
+            ("\u00a0", "Different title", ["abstract.space_char.nbsp", "abstract.empty"]),
             ("short abstract", "Different title", ["abstract.too_short"]),
+            ("A" * 6001, "Different title", ["abstract.too_long"]),
             (
                 "No abstract available.",
                 "Different title",
@@ -357,6 +361,201 @@ class TestRuleQuanliangFieldValidation:
             result = model.eval(Data(title=title, abstract=abstract))
             assert result.status is True
             assert result.label == expected_labels
+
+    def test_abstract_expanded_markup_and_unicode_labels(self):
+        cases = [
+            (
+                "This abstract has <i>formatted</i> content.",
+                ["abstract.html_tag.formatting"],
+            ),
+            (
+                "<p>This abstract contains a structured paragraph.</p>",
+                ["abstract.html_tag.structure"],
+            ),
+            (
+                "This abstract has an <a href='https://example.com'>external link</a>.",
+                ["abstract.html_tag.link"],
+            ),
+            (
+                "This abstract includes <img alt='diagram'/> media content.",
+                ["abstract.html_tag.media"],
+            ),
+            (
+                "<jats:p>This abstract contains a JATS paragraph.</jats:p>",
+                ["abstract.html_tag.jats"],
+            ),
+            (
+                "<ns3:p>This abstract contains another namespace.</ns3:p>",
+                ["abstract.html_tag.namespaced"],
+            ),
+            (
+                "This abstract contains <!-- an XML comment --> residue.",
+                ["abstract.html_tag.xml_comment"],
+            ),
+            (
+                "This abstract contains <![CDATA[raw content]]> residue.",
+                ["abstract.html_tag.cdata"],
+            ),
+            (
+                '<?xml version="1.0"?> This abstract contains an XML declaration.',
+                ["abstract.html_tag.xml_declaration"],
+            ),
+            (
+                "<!DOCTYPE article> This abstract contains a document type.",
+                ["abstract.html_tag.doctype"],
+            ),
+            (
+                "Water H<sub>2</sub>O appears in this abstract.",
+                ["abstract.html_tag.sub_sup"],
+            ),
+            (
+                "This abstract includes <mml:math><mml:mi>x</mml:mi></mml:math>.",
+                ["abstract.html_tag.math"],
+            ),
+            (
+                "This abstract contains an incomplete <strong",
+                ["abstract.html_tag.incomplete"],
+            ),
+            (
+                "This abstract contains <i>mismatched markup</b> here.",
+                ["abstract.html_tag.formatting", "abstract.html_tag.mismatched"],
+            ),
+            (
+                "This abstract contains a named entity &amp; in its text.",
+                ["abstract.html_entity.named"],
+            ),
+            (
+                "This abstract contains a decimal entity &#160; in its text.",
+                ["abstract.html_entity.decimal"],
+            ),
+            (
+                "This abstract contains a hexadecimal entity &#xA0; in its text.",
+                ["abstract.html_entity.hex"],
+            ),
+            (
+                "This abstract has [!i]formatting[!/i] tokens in its text.",
+                ["abstract.markup_tag.formatting"],
+            ),
+            (
+                "This abstract contains a confirmed [○!R] crawler token.",
+                ["abstract.markup_tag.crawler"],
+            ),
+            (
+                "This abstract contains a visible <ETX> crawler boundary.",
+                ["abstract.crawler_residue.etx"],
+            ),
+            (
+                "This abstract contains <Previous page | Next page> navigation.",
+                ["abstract.crawler_residue.navigation"],
+            ),
+            (
+                "This abstract contains template residue.\nDownload PDF",
+                ["abstract.crawler_residue.template"],
+            ),
+            (
+                "This abstract contains a � replacement character.",
+                ["abstract.special_char.replacement", "abstract.encoding_error"],
+            ),
+            (
+                "This abstract contains a \x03 real control character.",
+                ["abstract.special_char.control"],
+            ),
+            (
+                "This abstract contains a \ue000 private-use character.",
+                ["abstract.special_char.private_use_area"],
+            ),
+            (
+                "This abstract contains a \u200b zero-width space.",
+                ["abstract.invisible_char.zero_width_space"],
+            ),
+            (
+                "This abstract contains a \ufeff BOM character.",
+                ["abstract.invisible_char.bom"],
+            ),
+            (
+                "This abstract contains a soft\u00adhyphen character.",
+                ["abstract.invisible_char.soft_hyphen"],
+            ),
+            (
+                "This abstract contains a \u200c ZWNJ character.",
+                ["abstract.invisible_char.zwnj"],
+            ),
+            (
+                "This abstract contains a \u200d ZWJ character.",
+                ["abstract.invisible_char.zwj"],
+            ),
+            (
+                "This abstract contains a \u202e bidi control character.",
+                ["abstract.invisible_char.bidi_control"],
+            ),
+            (
+                "This abstract contains a \u00a0 non-breaking space.",
+                ["abstract.space_char.nbsp"],
+            ),
+            (
+                "This abstract contains a \u2003 typographic space.",
+                ["abstract.space_char.typographic"],
+            ),
+            (
+                "This abstract contains a \t TAB character.",
+                ["abstract.space_char.tab"],
+            ),
+            (
+                "This abstract contains too many breaks.\n\n\nThe text resumes here.",
+                ["abstract.space_char.excessive_line_break"],
+            ),
+        ]
+
+        for abstract, expected_labels in cases:
+            model = RuleQuanliangFieldValidation()
+            model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+            model.dynamic_config.key_list = ["abstract"]
+
+            result = model.eval(Data(title="Different title", abstract=abstract))
+
+            assert result.status is True, abstract
+            assert result.label == expected_labels, abstract
+
+    def test_abstract_jats_math_and_etx_categories_are_exclusive(self):
+        cases = [
+            (
+                "<jats:xref>This abstract has a JATS cross reference.</jats:xref>",
+                ["abstract.html_tag.jats"],
+            ),
+            (
+                "<mml:math><mml:mi>x</mml:mi></mml:math> appears in this abstract.",
+                ["abstract.html_tag.math"],
+            ),
+            (
+                "This abstract contains visible <<ETX>> text but no control byte.",
+                ["abstract.crawler_residue.etx"],
+            ),
+            (
+                "This abstract contains a real \x03 byte but no visible ETX token.",
+                ["abstract.special_char.control"],
+            ),
+        ]
+
+        for abstract, expected_labels in cases:
+            model = RuleQuanliangFieldValidation()
+            model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+            model.dynamic_config.key_list = ["abstract"]
+
+            result = model.eval(Data(abstract=abstract))
+
+            assert result.label == expected_labels, abstract
+
+    def test_abstract_single_line_break_is_not_excessive(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = ["abstract"]
+
+        result = model.eval(
+            Data(abstract="This is the first paragraph.\nThis is the second paragraph.")
+        )
+
+        assert result.status is False
+        assert result.label == ["QUALITY_GOOD"]
 
     def test_abstract_empty_matches_after_trimming(self):
         model = RuleQuanliangFieldValidation()
@@ -396,6 +595,21 @@ class TestRuleQuanliangFieldValidation:
 
         assert result.status is False
         assert result.label == ["QUALITY_GOOD"]
+
+    def test_abstract_bibliographic_angle_brackets_are_not_html(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = ["abstract"]
+
+        for abstract in (
+            "This abstract discusses collected <Articles> from the archive.",
+            "This abstract compares x < y and y > z in the experiment.",
+            "This abstract describes a concise <Introduction> to metadata.",
+            "This abstract identifies a historical <sound recording> item.",
+        ):
+            result = model.eval(Data(abstract=abstract))
+            assert result.status is False, abstract
+            assert result.label == ["QUALITY_GOOD"], abstract
 
     def test_reference_title_propagates_multiple_error_labels(self):
         model = RuleQuanliangFieldValidation()
