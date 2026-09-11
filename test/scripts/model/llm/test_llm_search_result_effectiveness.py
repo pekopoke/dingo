@@ -13,6 +13,51 @@ from dingo.model.llm.llm_search_result_effectiveness import (  # isort: skip
 )
 
 
+@pytest.mark.parametrize('fields', [('title',), ('abstract',), ('title', 'abstract')])
+def test_recovered_fields_are_labeled_without_penalty_or_llm(monkeypatch, fields):
+    grader = LLMSearchResultEffectiveness(enable_llm_quality=True)
+
+    def unexpected_llm(**kwargs):
+        pytest.fail('Recovery provenance must not trigger LLM calls')
+
+    monkeypatch.setattr(grader, '_judge_llm_field_quality', unexpected_llm)
+    grade = grader.grade(result={
+        '_eval_profile': 'agentic', 'title': 'Title', 'abstract': 'Abstract',
+        'chunk': 'Chunk', '_source_quality': 1,
+        '_metadata_recovered_fields': {field: 'meta-search' for field in fields},
+    })
+    assert grade.score == 1
+    assert set(grade.issues) == {f'{field}_recovered' for field in fields}
+    assert set(_issues_to_labels(grade.issues)) == {
+        f'Effectiveness.Error_{field.title()}_Recovered' for field in fields}
+
+
+@pytest.mark.parametrize('metadata', [None, [], 'meta-search', {}, {'title': 'other'}])
+def test_invalid_recovery_provenance_does_not_create_labels(metadata):
+    grade = LLMSearchResultEffectiveness().grade(result={
+        '_eval_profile': 'agentic', 'title': 'Title', 'abstract': 'Abstract',
+        'chunk': 'Chunk', '_source_quality': 1, '_metadata_recovered_fields': metadata,
+    })
+    assert not grade.issues
+
+
+def test_empty_recovered_fields_remain_missing():
+    grade = LLMSearchResultEffectiveness().grade(result={
+        '_eval_profile': 'agentic', 'title': ' ', 'abstract': '',
+        'chunk': 'Chunk', '_source_quality': 1,
+        '_metadata_recovered_fields': {'title': 'meta-search', 'abstract': 'meta-search'},
+    })
+    assert set(grade.issues) == {'missing_title', 'missing_abstract'}
+    assert grade.score == 0.5
+
+
+def test_recovery_labels_do_not_change_meta_search_profile():
+    grade = LLMSearchResultEffectiveness().grade(result={
+        'title': 'Title', 'abstract': 'Abstract',
+        '_metadata_recovered_fields': {'title': 'meta-search'},
+    })
+    assert 'title_recovered' not in grade.issues
+
 @pytest.mark.parametrize('text', ['刘凤军，64−80', '降解解析' * 30, 'differentiated\u2003thyroid\u00a0carcinoma'])
 def test_normal_names_math_and_spaces_do_not_trigger(text):
     assert _rule_abnormal_char_issues(text) == []
@@ -20,7 +65,46 @@ def test_normal_names_math_and_spaces_do_not_trigger(text):
 
 @pytest.mark.parametrize('entity', ['&amp;', '&nbsp;', '&quot;', '&lt;', '&alpha;', '&#38;', '&#x26;', '&#X26;'])
 def test_html_entity_triggers_candidate_even_in_long_text(entity):
-    assert _rule_abnormal_char_issues('readable text ' * 100 + entity) == ['RuleSpecialCharacter']
+    assert _rule_abnormal_char_issues('readable text ' * 100 + entity) == ['RuleHtmlEntity']
+
+
+@pytest.mark.parametrize('entity', ['h&amp;auml;nchen', '&amp;', '&auml;', '&#247;', '&#38;', '&#x26;'])
+@pytest.mark.parametrize('model_label', ['html_entity', 'html_tag', 'special_char_noise'])
+def test_entity_gets_own_label_with_exact_evidence(monkeypatch, entity, model_label):
+    grader = LLMSearchResultEffectiveness(enable_llm_quality=True)
+    monkeypatch.setattr(grader, '_judge_llm_field_quality', lambda **kw: LLMFieldQuality(
+        title_score=0.7, issues=[f'title:{model_label}'], evidence={'title': [entity]}))
+    grade = grader.grade(result={'_eval_profile': 'agentic', 'title': 'Title '+entity,
+                                 'abstract': 'A', 'chunk': 'C', '_source_quality': 1})
+    assert grade.score == pytest.approx(0.925)
+    assert _issues_to_labels(grade.issues) == ['Effectiveness.Error_HTML_Entity']
+
+
+def test_entity_label_requires_entity_in_cited_evidence(monkeypatch):
+    grader = LLMSearchResultEffectiveness(enable_llm_quality=True)
+    monkeypatch.setattr(grader, '_judge_llm_field_quality', lambda **kw: LLMFieldQuality(
+        title_score=0.7, issues=['title:html_entity'], evidence={'title': ['Title']}))
+    grade = grader.grade(result={'_eval_profile': 'agentic', 'title': 'Title &amp;',
+                                 'abstract': 'A', 'chunk': 'C', '_source_quality': 1})
+    assert grade.score == 1
+    assert not grade.issues
+
+
+def test_entity_and_other_noise_are_not_globally_renamed(monkeypatch):
+    grader = LLMSearchResultEffectiveness(enable_llm_quality=True)
+    monkeypatch.setattr(grader, '_judge_llm_field_quality', lambda **kw: LLMFieldQuality(
+        title_score=0.7, issues=['title:html_entity', 'title:special_char_noise'],
+        evidence={'title': ['&amp;', '<|noise|>']}))
+    grade = grader.grade(result={'_eval_profile': 'agentic', 'title': '&amp; <|noise|>',
+                                 'abstract': 'A', 'chunk': 'C', '_source_quality': 1})
+    assert set(_issues_to_labels(grade.issues)) == {
+        'Effectiveness.Error_HTML_Entity', 'Effectiveness.Error_Special_Char_Noise'}
+
+
+def test_entity_postfilter_ignores_image_destinations_and_decoded_characters():
+    for text in ['![](x.png?a=1&amp;b=2)', 'hänchen & CO2', '&notARealEntity;']:
+        assert _filter_llm_field_issues('chunk', text, ['chunk:html_entity']) == []
+    assert _filter_llm_field_issues('title', '&amp;', ['title:special_char_noise']) == []
 
 
 @pytest.mark.parametrize('text', [

@@ -4,6 +4,14 @@
 
 ## Agentic Search 主观评测
 
+HTML 实体使用独立标签 `Effectiveness.Error_HTML_Entity`（HTML 实体残留），
+例如 `&amp;`、`&#38;`、`&#x26;`、双重转义的 `h&amp;auml;nchen`。
+初筛候选为 `RuleHtmlEntity`，开启 LLM 时仍需二次确认和精确证据校验；
+未开启 LLM 时使用 `Effectiveness.Error_Rule_HTML_Entity` 候选标签。
+`HTML_Tag` 保留给损坏/多余的标签结构，`Special_Char_Noise` 保留给真正的字符噪声，
+并非将所有特殊字符标签统一改名。实体教学代码、正常解码字符及完整图片链接地址不自动扣分。
+历史报告不自动迁移标签；重新评测后生成对应的分项 JSONL。
+
 综合脚本支持 `--retrieval-backend agentic`。相关性使用 `query + title + chunk`
 进行逐条 LLM 判断；有效性采用四个等权子项：`chunk_quality`、`title_quality`、
 `abstract_quality`、`source_quality`，各占 0.25。
@@ -20,6 +28,19 @@ Authority 会按 `doc_id` 批量调用 `/meta-search`，补充被引百分位、
 高影响力被引数、期刊、出版社与 DOI。引用影响力优先使用学科/年份归一化百分位，
 其次使用 FWCI，最后回退到原始被引数。相同文献的多个 chunk 只参与一次 query 级
 Authority 聚合。
+
+同一批元数据请求也获取 `title` 和 `abstract`，仅补全原结果为空或全为空白的字段，
+不覆盖已有标题、摘要。补全前值保存在 `_metadata_original_fields`，来源记录在
+`_metadata_recovered_fields`。后续评测使用补全后的文本；成功补回的字段不再判定为缺失，
+但仍接受文本质量检查。未命中、请求失败或元数据仍为空时不自动豁免缺失。
+Agentic 评测根据补全来源生成 `Effectiveness.Error_Title_Recovered`（标题缺失，已补全）
+和 `Effectiveness.Error_Abstract_Recovered`（摘要缺失，已补全）两个问题标签。
+同一字段与 `Title_Miss` / `Abstract_Miss` 互斥：补全后仍为空只标记缺失。
+这两个标签无需 LLM 判断，不额外扣分；补全文本仍按正常质量规则计分。
+标签会进入 Executor 的问题分类（即使有效性分数为 1）、问题统计和对应 JSONL，
+用于追踪原始响应完整性，不能将这类问题数量直接解释为补全后文本不合格数量。
+此逻辑用于 Agentic 的元数据补全流程；直接 Meta Search 的原始响应已默认包含标题和摘要，
+不能据此认定所有缺失都能恢复。历史结果需要重新评测才会更新。
 
 ```bash
 python examples/retrieval/sdk_eval_search_result.py \

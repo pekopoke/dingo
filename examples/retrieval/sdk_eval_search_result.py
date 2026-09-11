@@ -36,6 +36,8 @@ from dingo.retrieval.search_client import PaperResult, create_client  # noqa: E4
 EFFECTIVENESS_LABEL_TO_ISSUE = {
     "Effectiveness.Error_Title_Miss": "missing_title",
     "Effectiveness.Error_Abstract_Miss": "missing_abstract",
+    "Effectiveness.Error_Title_Recovered": "title_recovered",
+    "Effectiveness.Error_Abstract_Recovered": "abstract_recovered",
     "Effectiveness.Error_Chunk_Miss": "missing_chunk",
     "Effectiveness.Error_Keywords_Miss": "missing_keywords",
     "Effectiveness.Error_Author_Miss": "missing_author",

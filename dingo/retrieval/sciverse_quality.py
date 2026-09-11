@@ -16,6 +16,8 @@ from urllib3.util.retry import Retry
 AUTHORITY_FIELDS = (
     "doc_id",
     "unique_id",
+    "title",
+    "abstract",
     "doi",
     "citation_count",
     "influential_citation_count",
@@ -305,6 +307,12 @@ class SciverseQualityEnricher:
                 row["_authority_metadata_error"] = metadata["_authority_metadata_error"]
             else:
                 for key, value in metadata.items():
+                    if key in ("title", "abstract"):
+                        if isinstance(value, str) and value.strip() and not str(row.get(key) or "").strip():
+                            row.setdefault("_metadata_original_fields", {})[key] = row.get(key)
+                            row[key] = value
+                            row.setdefault("_metadata_recovered_fields", {})[key] = "meta-search"
+                        continue
                     if value not in (None, "", [], {}):
                         row[key] = value
                 row["_authority_metadata_status"] = "found"

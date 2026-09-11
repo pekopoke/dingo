@@ -58,6 +58,26 @@ def test_issue_export_keeps_evidence_and_deduplicates_labels(tmp_path):
     assert json.loads(rows[0])["raw_data"]["rank"] == 1
 
 
+def test_recovered_labels_export_as_separate_issue_files(tmp_path):
+    from dingo.model.llm.llm_search_result_effectiveness import (
+        LLMSearchResultEffectiveness, _issues_to_labels,
+    )
+    grade = LLMSearchResultEffectiveness().grade(result={
+        '_eval_profile': 'agentic', 'title': 'Title', 'abstract': 'Abstract',
+        'chunk': 'Chunk', '_source_quality': 1,
+        '_metadata_recovered_fields': {'title': 'meta-search', 'abstract': 'meta-search'},
+    })
+    record = _record('query', 1, 1, grade.score, 1)
+    labels = _issues_to_labels(grade.issues)
+    record['eval_details']['search_result'][0]['label'] = labels
+    sdk_eval_search_result.write_issue_lists(tmp_path, [record])
+    assert json.loads((tmp_path / 'issue_counts.json').read_text(encoding='utf-8')) == {
+        label: 1 for label in labels}
+    for label in labels:
+        assert (tmp_path / 'issues' / f'{label}.jsonl').exists()
+        assert sdk_eval_search_result.EFFECTIVENESS_LABEL_TO_ISSUE[label].endswith('_recovered')
+
+
 def test_agentic_local_executor_integration_without_network(tmp_path, monkeypatch):
     from dingo.config import InputArgs
     from dingo.exec import Executor
