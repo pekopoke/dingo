@@ -211,7 +211,6 @@ class TestRuleQuanliangFieldValidation:
             ),
             ("A title <!-- note --> with comment", ["title.html_tag.xml_comment"]),
             ("A title <![CDATA[with data]]> section", ["title.html_tag.cdata"]),
-            ("Water H<sub>2</sub>O analysis", ["title.html_tag.sub_sup"]),
             (
                 "<mml:math><mml:mi>x</mml:mi></mml:math> equation",
                 ["title.html_tag.math"],
@@ -257,6 +256,21 @@ class TestRuleQuanliangFieldValidation:
 
             assert result.status is True, title
             assert result.label == expected_labels, title
+
+    def test_title_and_abstract_allow_sub_sup_markup(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = ["title", "abstract"]
+
+        result = model.eval(
+            Data(
+                title="Water H<sub>2</sub>O analysis",
+                abstract="Water H<sub>2</sub>O appears in this abstract.",
+            )
+        )
+
+        assert result.status is False
+        assert result.label == ["QUALITY_GOOD"]
 
     def test_title_namespaced_link_reports_both_relevant_labels(self):
         model = RuleQuanliangFieldValidation()
@@ -403,10 +417,6 @@ class TestRuleQuanliangFieldValidation:
             (
                 "<!DOCTYPE article> This abstract contains a document type.",
                 ["abstract.html_tag.doctype"],
-            ),
-            (
-                "Water H<sub>2</sub>O appears in this abstract.",
-                ["abstract.html_tag.sub_sup"],
             ),
             (
                 "This abstract includes <mml:math><mml:mi>x</mml:mi></mml:math>.",

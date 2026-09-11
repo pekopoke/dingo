@@ -152,7 +152,8 @@ _TITLE_TAG_PATTERN_CHECKS = (
     (TITLE_HTML_TAG_NAMESPACED_RE, "html_tag.namespaced", "contains namespaced XML tag"),
     (HTML_TAG_XML_COMMENT_RE, "html_tag.xml_comment", "contains XML comment"),
     (HTML_TAG_CDATA_RE, "html_tag.cdata", "contains CDATA section"),
-    (TITLE_HTML_TAG_SUB_SUP_RE, "html_tag.sub_sup", "contains subscript or superscript tag"),
+    # Temporarily allow scientific subscript/superscript markup such as H<sub>2</sub>O.
+    # (TITLE_HTML_TAG_SUB_SUP_RE, "html_tag.sub_sup", "contains subscript or superscript tag"),
     (TITLE_HTML_TAG_MATH_RE, "html_tag.math", "contains MathML or formula tag"),
 )
 _TITLE_ENTITY_PATTERN_CHECKS = (
@@ -349,7 +350,8 @@ _ABSTRACT_TAG_PATTERN_CHECKS = (
         "contains XML declaration",
     ),
     (ABSTRACT_HTML_TAG_DOCTYPE_RE, "html_tag.doctype", "contains DOCTYPE declaration"),
-    (ABSTRACT_HTML_TAG_SUB_SUP_RE, "html_tag.sub_sup", "contains subscript or superscript tag"),
+    # Temporarily allow scientific subscript/superscript markup such as H<sub>2</sub>O.
+    # (ABSTRACT_HTML_TAG_SUB_SUP_RE, "html_tag.sub_sup", "contains subscript or superscript tag"),
     (ABSTRACT_HTML_TAG_MATH_RE, "html_tag.math", "contains MathML or formula tag"),
 )
 _ABSTRACT_ENTITY_PATTERN_CHECKS = (
