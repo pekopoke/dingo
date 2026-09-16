@@ -59,9 +59,7 @@ def test_issue_export_keeps_evidence_and_deduplicates_labels(tmp_path):
 
 
 def test_recovered_labels_export_as_separate_issue_files(tmp_path):
-    from dingo.model.llm.llm_search_result_effectiveness import (
-        LLMSearchResultEffectiveness, _issues_to_labels,
-    )
+    from dingo.model.llm.llm_search_result_effectiveness import LLMSearchResultEffectiveness, _issues_to_labels
     grade = LLMSearchResultEffectiveness().grade(result={
         '_eval_profile': 'agentic', 'title': 'Title', 'abstract': 'Abstract',
         'chunk': 'Chunk', '_source_quality': 1,

@@ -3,6 +3,7 @@ from dingo.retrieval.sciverse_quality import chunk_consistency_score, normalize_
 
 def test_metadata_recovers_missing_text_without_overwriting_original(monkeypatch):
     from types import SimpleNamespace
+
     from dingo.retrieval.sciverse_quality import SciverseQualityEnricher
 
     enricher = SciverseQualityEnricher(api_url="https://example.invalid", api_token="test")
@@ -39,6 +40,7 @@ def test_metadata_recovers_missing_text_without_overwriting_original(monkeypatch
 
 def test_metadata_error_does_not_fabricate_missing_text(monkeypatch):
     from types import SimpleNamespace
+
     from dingo.retrieval.sciverse_quality import SciverseQualityEnricher
 
     enricher = SciverseQualityEnricher(api_url="https://example.invalid", api_token="test")

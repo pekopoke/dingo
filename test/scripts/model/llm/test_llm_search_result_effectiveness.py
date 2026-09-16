@@ -58,6 +58,7 @@ def test_recovery_labels_do_not_change_meta_search_profile():
     })
     assert 'title_recovered' not in grade.issues
 
+
 @pytest.mark.parametrize('text', ['刘凤军，64−80', '降解解析' * 30, 'differentiated\u2003thyroid\u00a0carcinoma'])
 def test_normal_names_math_and_spaces_do_not_trigger(text):
     assert _rule_abnormal_char_issues(text) == []
@@ -74,7 +75,7 @@ def test_entity_gets_own_label_with_exact_evidence(monkeypatch, entity, model_la
     grader = LLMSearchResultEffectiveness(enable_llm_quality=True)
     monkeypatch.setattr(grader, '_judge_llm_field_quality', lambda **kw: LLMFieldQuality(
         title_score=0.7, issues=[f'title:{model_label}'], evidence={'title': [entity]}))
-    grade = grader.grade(result={'_eval_profile': 'agentic', 'title': 'Title '+entity,
+    grade = grader.grade(result={'_eval_profile': 'agentic', 'title': 'Title ' + entity,
                                  'abstract': 'A', 'chunk': 'C', '_source_quality': 1})
     assert grade.score == pytest.approx(0.925)
     assert _issues_to_labels(grade.issues) == ['Effectiveness.Error_HTML_Entity']
