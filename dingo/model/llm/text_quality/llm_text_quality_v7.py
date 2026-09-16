@@ -376,7 +376,7 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 
 # Output Format
 Return one JSON object only:
-{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0, "Formula_Missing": 0, "Formula_Partial_Loss": 0, "Formula_Token_Corruption": 0, "Formula_Unparseable": 0, "Formula_Structure_Corruption": 0, "Formula_Layout_Corruption": 0, "Formula_Extra_Content": 0, "Table_Missing": 0, "Table_Unparseable": 0, "Table_Partial_Loss": 0, "Table_Cell_Corruption": 0, "Table_Header_Corruption": 0, "Table_Structure_Corruption": 0, "Table_Layout_Corruption": 0, "Table_Extra_Content": 0, "Code_Missing": 0, "Code_Unparseable": 0, "Code_Partial_Loss": 0, "Code_Token_Corruption": 0, "Code_Layout_Corruption": 0, "Code_Extra_Content": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
 
 Feature counting rules:
 - Count only structures in the input content after `# Input content to evaluate:`; never count structures shown in this prompt or its examples.
@@ -389,6 +389,10 @@ Feature counting rules:
 - Classify by semantic purpose: table markup counts as a table rather than code, and formula markup counts as a formula rather than code. Do not double-count the same structure across categories.
 - Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. Include them in both the category total and its error count.
 - Count each defective structure only once in its error count even when it has multiple supported defect labels. Error counts measure defective structures, not labels or defect occurrences.
+- For every allowed `Formula_*`, `Table_*`, and `Code_*` label, return a same-named key in `feature` containing the number of distinct structures with that label. Always return all label-count keys, using zero for labels that do not occur. For example, `"Formula_Token_Corruption": 3` means three formulas are affected, `"Table_Cell_Corruption": 2` means two tables are affected, and `"Code_Unparseable": 1` means one code structure is affected.
+- Count a structure once under each applicable label. If one structure has two independent supported defects with different labels, it contributes one to each label count, while still contributing only one to its category's `error_*_count`.
+- `Formula_Missing`, `Table_Missing`, and `Code_Missing` count distinct explicitly missing structures even though those absent structures do not contribute to their category total or `error_*_count`.
+- Every positive label count requires the matching object in `findings`, and every `Formula_*`, `Table_*`, or `Code_*` finding requires a positive matching count. Each non-Missing label count must not exceed its corresponding category total.
 - A completely missing structure represented only by prose, a caption, or a placeholder contributes zero to both its category total and its error count. A `Formula_Missing`, `Table_Missing`, or `Code_Missing` finding alone therefore does not increase an error count.
 - Each error count must be less than or equal to its corresponding total count.
 - If an error count is greater than zero, `findings` must contain at least one matching non-Missing defect label for that category. Conversely, a supported non-Missing `Formula_*`, `Table_*`, or `Code_*` finding requires at least one error structure in that category.
@@ -608,7 +612,7 @@ Output: [{"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": 
 ---
 
 Mandatory final response shape reminder:
-{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0, "Formula_Missing": 0, "Formula_Partial_Loss": 0, "Formula_Token_Corruption": 0, "Formula_Unparseable": 0, "Formula_Structure_Corruption": 0, "Formula_Layout_Corruption": 0, "Formula_Extra_Content": 0, "Table_Missing": 0, "Table_Unparseable": 0, "Table_Partial_Loss": 0, "Table_Cell_Corruption": 0, "Table_Header_Corruption": 0, "Table_Structure_Corruption": 0, "Table_Layout_Corruption": 0, "Table_Extra_Content": 0, "Code_Missing": 0, "Code_Unparseable": 0, "Code_Partial_Loss": 0, "Code_Token_Corruption": 0, "Code_Layout_Corruption": 0, "Code_Extra_Content": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
 
 Return the JSON object only, with counts computed from the following input.
 
