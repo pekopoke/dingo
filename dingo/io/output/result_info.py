@@ -19,12 +19,18 @@ class ResultInfo(BaseModel):
         default_factory=dict,
         exclude=True,
     )
+    feature_details: Dict[str, List[EvalDetail]] = Field(
+        default_factory=dict,
+        exclude=True,
+    )
 
     @staticmethod
     def _eval_detail_to_dict(model_res: EvalDetail) -> Dict[str, Any]:
         detail = model_res.model_dump()
         if detail.get('usage') is None:
             detail.pop('usage', None)
+        if detail.get('feature') is None:
+            detail.pop('feature', None)
         return detail
 
     @staticmethod

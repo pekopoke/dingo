@@ -9,7 +9,7 @@ from dingo.model.response.response_class import ResponseScoreTypeNameReason
 
 
 class BaseTextQualityV2(BaseOpenAI):
-    """Parse a JSON list of quality findings into one ``EvalDetail``."""
+    """Parse quality findings and optional feature counts into an ``EvalDetail``."""
 
     _required_fields = [RequiredField.CONTENT]
 
@@ -24,6 +24,23 @@ class BaseTextQualityV2(BaseOpenAI):
             response = response.rstrip()[:-3]
 
         response_json = json.loads(response.strip())
+        feature = None
+        if isinstance(response_json, dict):
+            feature = response_json.get("feature")
+            response_json = response_json.get("findings")
+            if not isinstance(feature, dict):
+                raise ValueError("feature must be a JSON object")
+            for name, count in feature.items():
+                if (
+                    not isinstance(name, str)
+                    or isinstance(count, bool)
+                    or not isinstance(count, int)
+                    or count < 0
+                ):
+                    raise ValueError(
+                        "feature must map string names to non-negative integers"
+                    )
+
         if not isinstance(response_json, list) or not response_json:
             raise ValueError("Text quality response must be a non-empty JSON list")
 
@@ -41,6 +58,7 @@ class BaseTextQualityV2(BaseOpenAI):
                 score=1,
                 label=["QUALITY_GOOD"],
                 reason=[good.reason],
+                feature=feature,
             )
 
         if good_findings:
@@ -57,4 +75,5 @@ class BaseTextQualityV2(BaseOpenAI):
             score=0,
             label=[f"{item.type}.{item.name}" for item in bad_findings],
             reason=[item.reason for item in bad_findings],
+            feature=feature,
         )

@@ -278,6 +278,100 @@ class TestLocal:
             else:
                 Model.llm_name_map["TokenUsageGoodLLM"] = old_model
 
+    def test_feature_can_include_unsaved_good_eval_details(self):
+        class FeatureGoodLLM:
+            def eval(self, input_data):
+                return EvalDetail(
+                    metric="FeatureGoodLLM",
+                    status=False,
+                    label=["QUALITY_GOOD"],
+                    feature={"items": 2},
+                )
+
+        old_model = Model.llm_name_map.get("FeatureGoodLLM")
+        Model.llm_name_map["FeatureGoodLLM"] = FeatureGoodLLM
+        try:
+            input_args = InputArgs(
+                executor={
+                    "result_save": {
+                        "bad": True,
+                        "good": False,
+                        "all_labels": False,
+                    }
+                },
+                evaluator=[
+                    {
+                        "fields": {"content": "content"},
+                        "evals": [{"name": "FeatureGoodLLM"}],
+                    }
+                ],
+            )
+            executor = LocalExecutor(input_args)
+
+            result = executor.evaluate_single_data(
+                dingo_id="1",
+                eval_fields={"content": "content"},
+                eval_type="llm",
+                map_data={"content": "ok"},
+                eval_list=input_args.evaluator[0].evals,
+            )
+
+            assert result.eval_details == {}
+            assert result.feature_details["content"][0].feature == {"items": 2}
+        finally:
+            if old_model is None:
+                Model.llm_name_map.pop("FeatureGoodLLM", None)
+            else:
+                Model.llm_name_map["FeatureGoodLLM"] = old_model
+
+    def test_feature_is_aggregated_during_execution(self, tmp_path):
+        class FeatureLLM:
+            def eval(self, input_data):
+                return EvalDetail(
+                    metric="FeatureLLM",
+                    status=False,
+                    label=["QUALITY_GOOD"],
+                    feature={"items": 2},
+                )
+
+        input_path = tmp_path / "feature.jsonl"
+        input_path.write_text(
+            '{"content": "first"}\n{"content": "second"}\n',
+            encoding="utf-8",
+        )
+        old_model = Model.llm_name_map.get("FeatureLLM")
+        Model.llm_name_map["FeatureLLM"] = FeatureLLM
+        try:
+            input_args = InputArgs(
+                input_path=str(input_path),
+                output_path=str(tmp_path / "outputs"),
+                dataset={"source": "local", "format": "jsonl"},
+                executor={
+                    "result_save": {
+                        "bad": False,
+                        "good": False,
+                        "all_labels": False,
+                    }
+                },
+                evaluator=[
+                    {
+                        "fields": {"content": "content"},
+                        "evals": [{"name": "FeatureLLM"}],
+                    }
+                ],
+            )
+
+            summary = LocalExecutor(input_args).execute()
+
+            assert summary.to_dict()["feature"] == {
+                "content": {"FeatureLLM": {"items": 4}}
+            }
+        finally:
+            if old_model is None:
+                Model.llm_name_map.pop("FeatureLLM", None)
+            else:
+                Model.llm_name_map["FeatureLLM"] = old_model
+
     def test_all_labels_config(self):
         input_data = {
             "input_path": "test/data/test_local_jsonl.jsonl",

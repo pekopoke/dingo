@@ -30,6 +30,54 @@ def test_good_response_is_a_single_item_list():
     assert result.reason == ["Clear text"]
 
 
+def test_structured_response_includes_feature():
+    response = json.dumps({
+        "feature": {
+            "formula_count": 2,
+            "table_count": 1,
+            "code_count": 3,
+        },
+        "findings": [
+            {
+                "score": 1,
+                "type": "Good",
+                "name": "None",
+                "reason": "All structures are intact",
+            }
+        ],
+    })
+
+    result = LLMTextQualityV7.process_response(response)
+
+    assert result.feature == {
+        "formula_count": 2,
+        "table_count": 1,
+        "code_count": 3,
+    }
+
+
+@pytest.mark.parametrize("invalid_count", [-1, 1.5, True, "1"])
+def test_structured_response_rejects_invalid_feature(invalid_count):
+    response = json.dumps({
+        "feature": {
+            "formula_count": invalid_count,
+            "table_count": 0,
+            "code_count": 0,
+        },
+        "findings": [
+            {
+                "score": 1,
+                "type": "Good",
+                "name": "None",
+                "reason": "Clear text",
+            }
+        ],
+    })
+
+    with pytest.raises(ValueError):
+        LLMTextQualityV7.process_response(response)
+
+
 @pytest.mark.parametrize("response", [
     "[]",
     '{"score": 1, "type": "Good", "name": "None", "reason": "Clear text"}',
