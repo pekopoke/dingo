@@ -360,7 +360,7 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 # Workflow
 
 1. **Detect Context**: Identify the language/script and whether the input is prose, list, table, code, math, metadata, or mixed content
-2. **Count Features**: Count each distinct formula, table, and code structure in the input, regardless of whether it is good or defective
+2. **Count Features**: Count each distinct formula, table, and code structure, then count how many distinct present structures in each category have at least one supported defect
 3. **Quick Scan**: Is the text generally readable, coherent, and structurally recoverable?
 4. **Collect Evidence**: Locate explicit defects and check label-specific thresholds and exclusions
 5. **Identify Defects**: Collect every distinct label whose threshold is independently met.
@@ -376,16 +376,24 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 
 # Output Format
 Return one JSON object only:
-{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
 
 Feature counting rules:
 - Count only structures in the input content after `# Input content to evaluate:`; never count structures shown in this prompt or its examples.
 - `formula_count`: Count each distinct inline formula, display equation, equation environment, MathML formula, chemical formula, or formula-like scientific expression as one. A multi-line equation environment is one formula structure.
 - `table_count`: Count each complete or partial logical table as one, regardless of its number of rows, columns, or markup blocks.
 - `code_count`: Count each distinct code, script, configuration, JSON, XML, or other machine-readable snippet as one. A fenced block is one code structure.
+- `error_formula_count`: Count distinct present formula structures that have at least one supported `Formula_*` defect.
+- `error_table_count`: Count distinct present table structures that have at least one supported `Table_*` defect.
+- `error_code_count`: Count distinct present code structures that have at least one supported `Code_*` defect.
 - Classify by semantic purpose: table markup counts as a table rather than code, and formula markup counts as a formula rather than code. Do not double-count the same structure across categories.
-- Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. A completely missing structure represented only by prose or a placeholder contributes zero.
-- All three counts must be non-negative integers.
+- Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. Include them in both the category total and its error count.
+- Count each defective structure only once in its error count even when it has multiple supported defect labels. Error counts measure defective structures, not labels or defect occurrences.
+- A completely missing structure represented only by prose, a caption, or a placeholder contributes zero to both its category total and its error count. A `Formula_Missing`, `Table_Missing`, or `Code_Missing` finding alone therefore does not increase an error count.
+- Each error count must be less than or equal to its corresponding total count.
+- If an error count is greater than zero, `findings` must contain at least one matching non-Missing defect label for that category. Conversely, a supported non-Missing `Formula_*`, `Table_*`, or `Code_*` finding requires at least one error structure in that category.
+- If `findings` contains only the Good object, all three error counts must be zero.
+- All six counts must be non-negative integers.
 
 For defective text, include all independently supported labels. Do not include a Good object together with defect objects. Emit each label at most once.
 
@@ -600,7 +608,7 @@ Output: [{"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": 
 ---
 
 Mandatory final response shape reminder:
-{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
 
 Return the JSON object only, with counts computed from the following input.
 
