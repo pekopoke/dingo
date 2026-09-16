@@ -9,7 +9,7 @@ class LLMTextQualityV7(BaseTextQualityV2):
     _metric_info = {
         "category": "Pretrain Text Quality Assessment Metrics",
         "metric_name": "LLMTextQualityV7",
-        "description": "Checks formula, table, code, readability, duplication, and safety in detail. Unlike V6, it supports multiple findings.",
+        "description": "Checks formula, table, code, readability, duplication, and safety in detail. Unlike V6, it supports multiple findings and counts formula, table, and code structures.",
         "paper_title": "WanJuanSiLu: A High-Quality Open-Source Webtext Dataset for Low-Resource Languages",
         "paper_url": "https://arxiv.org/abs/2501.14506",
         "paper_authors": "Yu et al., 2025",
@@ -360,11 +360,12 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 # Workflow
 
 1. **Detect Context**: Identify the language/script and whether the input is prose, list, table, code, math, metadata, or mixed content
-2. **Quick Scan**: Is the text generally readable, coherent, and structurally recoverable?
-3. **Collect Evidence**: Locate explicit defects and check label-specific thresholds and exclusions
-4. **Identify Defects**: Collect every distinct label whose threshold is independently met.
-5. **Verify Impact**: Would this issue meaningfully harm model training rather than merely reduce stylistic quality?
-6. **Assign Labels**:
+2. **Count Features**: Count each distinct formula, table, and code structure in the input, regardless of whether it is good or defective
+3. **Quick Scan**: Is the text generally readable, coherent, and structurally recoverable?
+4. **Collect Evidence**: Locate explicit defects and check label-specific thresholds and exclusions
+5. **Identify Defects**: Collect every distinct label whose threshold is independently met.
+6. **Verify Impact**: Would this issue meaningfully harm model training rather than merely reduce stylistic quality?
+7. **Assign Labels**:
    - Return one object per supported defect, each with score 0
    - If no defect is supported, return exactly one Good object with score 1
    - Type: 'Good' OR one of ['Completeness', 'Effectiveness', 'Similarity', 'Security']
@@ -374,7 +375,17 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 ---
 
 # Output Format
-Return a non-empty JSON array only: [{"score": 0/1, "type": "", "name": "", "reason": ""}]
+Return one JSON object only:
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+
+Feature counting rules:
+- Count only structures in the input content after `# Input content to evaluate:`; never count structures shown in this prompt or its examples.
+- `formula_count`: Count each distinct inline formula, display equation, equation environment, MathML formula, chemical formula, or formula-like scientific expression as one. A multi-line equation environment is one formula structure.
+- `table_count`: Count each complete or partial logical table as one, regardless of its number of rows, columns, or markup blocks.
+- `code_count`: Count each distinct code, script, configuration, JSON, XML, or other machine-readable snippet as one. A fenced block is one code structure.
+- Classify by semantic purpose: table markup counts as a table rather than code, and formula markup counts as a formula rather than code. Do not double-count the same structure across categories.
+- Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. A completely missing structure represented only by prose or a placeholder contributes zero.
+- All three counts must be non-negative integers.
 
 For defective text, include all independently supported labels. Do not include a Good object together with defect objects. Emit each label at most once.
 
@@ -413,6 +424,8 @@ Never invent a label or pair a name with the wrong type.
 The `reason` must cite a short concrete example or measurable pattern from the input. Do not use vague statements such as "low quality" or "unreadable" without evidence.
 
 # Examples
+
+The example outputs below show only the contents of the `findings` array for readability. The actual response must always use the complete JSON object required by `# Output Format`, including `feature`.
 
 **Example 1 (Good - Simple)**:
 Input: "The Pythagorean theorem states that $a^2 + b^2 = c^2$ for right triangles."
@@ -585,6 +598,11 @@ Input: "Thequickbrownfox. Thequickbrownfox. Thequickbrownfox. Thequickbrownfox. 
 Output: [{"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": "Word boundaries are missing in every repeated sentence"}, {"score": 0, "type": "Similarity", "name": "Duplication", "reason": "The same sentence repeats 6 times"}]
 
 ---
+
+Mandatory final response shape reminder:
+{"feature": {"formula_count": 0, "table_count": 0, "code_count": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+
+Return the JSON object only, with counts computed from the following input.
 
 # Input content to evaluate:
 

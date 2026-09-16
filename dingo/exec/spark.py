@@ -80,6 +80,7 @@ class SparkExecutor(ExecProto):
     def _aggregate_eval_details(acc, item):
         """聚合单个 item 的 eval_details 到累加器中，同时收集 scores"""
         eval_details_dict = item.get('eval_details', {})
+        feature_details = item.get('_feature_details', {})
 
         # 遍历第一层：字段名，第二层是 List[EvalDetail] (序列化为 list of dicts)
         for field_key, eval_detail_list in eval_details_dict.items():
@@ -114,6 +115,22 @@ class SparkExecutor(ExecProto):
                 else:
                     acc['label_counts'][field_key][label] += 1
 
+        feature_counts = acc.setdefault('features', {})
+        for field_key, eval_detail_list in feature_details.items():
+            field_counts = feature_counts.setdefault(field_key, {})
+            for eval_detail in eval_detail_list:
+                if isinstance(eval_detail, dict):
+                    metric = eval_detail.get('metric')
+                    feature = eval_detail.get('feature')
+                else:
+                    metric = eval_detail.metric
+                    feature = eval_detail.feature
+                if not metric or feature is None:
+                    continue
+                metric_counts = field_counts.setdefault(metric, {})
+                for name, count in feature.items():
+                    metric_counts[name] = metric_counts.get(name, 0) + count
+
         return acc
 
     @staticmethod
@@ -139,6 +156,14 @@ class SparkExecutor(ExecProto):
                     acc1['metric_scores'][field_key][metric] = scores.copy()
                 else:
                     acc1['metric_scores'][field_key][metric].extend(scores)
+
+        target_feature_counts = acc1.setdefault('features', {})
+        for field_key, metrics_dict in acc2.get('features', {}).items():
+            target = target_feature_counts.setdefault(field_key, {})
+            for metric, feature in metrics_dict.items():
+                metric_counts = target.setdefault(metric, {})
+                for name, count in feature.items():
+                    metric_counts[name] = metric_counts.get(name, 0) + count
 
         return acc1
 
@@ -229,7 +254,21 @@ class SparkExecutor(ExecProto):
                     else:
                         result_info.eval_details[k].extend(v)
 
-        return result_info.to_dict()
+                for k, v in r_i.feature_details.items():
+                    if k not in result_info.feature_details:
+                        result_info.feature_details[k] = v
+                    else:
+                        result_info.feature_details[k].extend(v)
+
+        result = result_info.to_dict()
+        result['_feature_details'] = {
+            field_key: [
+                {"metric": item.metric, "feature": item.feature}
+                for item in eval_detail_list
+            ]
+            for field_key, eval_detail_list in result_info.feature_details.items()
+        }
+        return result
 
     def evaluate_item(self, eval_fields: dict, eval_type: str, map_data: dict, eval_list: list) -> ResultInfo:
         result_info = ResultInfo()
@@ -259,6 +298,13 @@ class SparkExecutor(ExecProto):
 
         # Set result_info fields
         join_fields = ','.join(eval_fields.values()) if eval_fields else 'default'
+        feature_detail_list = [
+            item for item in eval_detail_list if item.feature is not None
+        ]
+        if feature_detail_list:
+            result_info.feature_details = {
+                join_fields: feature_detail_list
+            }
 
         # Decide which results to save based on configuration
         if self.input_args.executor.result_save.all_labels:
@@ -293,15 +339,21 @@ class SparkExecutor(ExecProto):
         # data_info_list 的每个元素是 Dict，包含 eval_details 字段
         if hasattr(self, 'data_info_list') and self.data_info_list:
             aggregated_results = self.data_info_list.aggregate(
-                {'label_counts': {}, 'metric_scores': {}},  # 初始累加器
+                {
+                    'label_counts': {},
+                    'metric_scores': {},
+                    'features': {},
+                },  # 初始累加器
                 SparkExecutor._aggregate_eval_details,  # 聚合单个元素
                 SparkExecutor._merge_eval_details  # 合并累加器
             )
             type_ratio_counts = aggregated_results['label_counts']
             metric_scores = aggregated_results['metric_scores']
+            features = aggregated_results['features']
         else:
             type_ratio_counts = {}
             metric_scores = {}
+            features = {}
 
         # 将计数转换为比例
         new_summary.type_ratio = {}
@@ -317,6 +369,14 @@ class SparkExecutor(ExecProto):
             for metric_name, scores in metrics.items():
                 for score in scores:
                     new_summary.add_metric_score(field_key, metric_name, score)
+
+        for field_key, metrics in features.items():
+            for metric_name, feature in metrics.items():
+                new_summary.add_feature(
+                    field_key,
+                    metric_name,
+                    feature,
+                )
 
         # 计算 metrics 的平均分等统计信息
         new_summary.calculate_metrics_score_averages()
