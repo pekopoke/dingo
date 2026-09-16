@@ -189,6 +189,7 @@ class LocalExecutor(ExecProto):
 
         for e_c_i in eval_list:
             # Get model class and instantiate
+            isolated_llm = False
             if eval_type == 'rule':
                 model_cls = Model.rule_name_map.get(e_c_i.name)
                 model = model_cls()  # 实例化类为对象，避免多线程配置覆盖
@@ -200,14 +201,31 @@ class LocalExecutor(ExecProto):
                     Model.set_config_rule(model_cls, e_c_i.config)
             elif eval_type == 'llm':
                 model_cls = Model.llm_name_map.get(e_c_i.name)
-                model = model_cls()
-                Model.set_config_llm(model, e_c_i.config)
-                Model.set_config_llm(model_cls, e_c_i.config)
+                # Instance evaluators can also inherit classmethod config helpers.
+                # Give both styles an isolated class before constructing instances.
+                runtime_attrs = {'client': None}
+                if hasattr(model_cls, 'dynamic_config'):
+                    runtime_attrs['dynamic_config'] = model_cls.dynamic_config.model_copy(deep=True)
+                runtime_cls = type(model_cls.__name__, (model_cls,), runtime_attrs)
+                Model.set_config_llm(runtime_cls, e_c_i.config)
+                if getattr(model_cls.eval, '__self__', None) is model_cls:
+                    # Classmethod evaluators must not share runtime config/client
+                    # across concurrent records or differently configured groups.
+                    model = runtime_cls
+                else:
+                    model = runtime_cls()
+                isolated_llm = True
             else:
                 raise ValueError(f"Error eval_type: {eval_type}")
 
             # Execute evaluation
-            tmp: EvalDetail = model.eval(Data(**map_data))
+            try:
+                tmp: EvalDetail = model.eval(Data(**map_data))
+            finally:
+                if isolated_llm:
+                    client = getattr(model, 'client', None)
+                    if callable(getattr(client, 'close', None)):
+                        client.close()
 
             # 直接添加EvalDetail到列表中，不再merge
             eval_detail_list.append(tmp)

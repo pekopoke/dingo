@@ -1,0 +1,141 @@
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from dingo.config import InputArgs
+from dingo.exec.local import LocalExecutor
+from dingo.io.input import Data
+from dingo.io.output.eval_detail import EvalDetail
+from dingo.model.llm.code_quality.base_code_quality import CodeQualityDetail
+from dingo.model.llm.code_quality.llm_code_quality_pipeline import LLMCodeQualityPipeline, merge_results
+from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeClassificationV1, LLMCodeQualityV1
+from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS, classification_consensus, configured_evaluator
+
+
+def classified(score):
+    if score is None:
+        return EvalDetail(metric='classifier', applicable=False, label=['REVIEW_EXECUTION_ERROR.Timeout'])
+    return LLMCodeClassificationV1.process_response(json.dumps({'score': score, 'contains_code': True, 'reason': 'fixture'}))
+
+
+@pytest.mark.parametrize('scores,low,complete', [([2, 5], True, True), ([5, 2], True, True),
+                                             ([3, 5], False, True), ([4, 4], False, True),
+                                             ([0, 1], True, True), ([2, None], True, False),
+                                             ([5, None], None, False), ([None, None], None, False)])
+def test_dual_low_threshold_and_partial_failures(scores, low, complete):
+    results = [classified(score) for score in scores]
+    consensus = classification_consensus(results)
+    assert consensus['low_code_content'] is low
+    assert consensus['execution_error'] is not complete
+    quality = CodeQualityDetail(metric='quality', details={'findings': []})
+    merged = merge_results(quality, results, DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v1')
+    assert ('Effectiveness.Low_Code_Content' in merged.label) == (low is True)
+    assert merged.applicable is complete
+    assert not (not complete and 'QUALITY_GOOD' in merged.label)
+
+
+def test_dual_scores_own_label_and_preserve_quality_decision():
+    quality = CodeQualityDetail(metric='quality', status=True, details={'findings': [
+        {'type': 'Effectiveness', 'name': 'Low_Code_Content', 'reason': 'single model low', 'line_start': None, 'line_end': None}]})
+    result = merge_results(quality, [classified(4), classified(5)], DEFAULT_CLASSIFICATION_MODELS,
+                           'pipeline', 'v1')
+    assert result.label == ['QUALITY_GOOD']
+    assert result.details['quality']['status'] is True
+    assert quality.details['findings']
+
+
+def test_pipeline_preserves_consensus_review_requirement():
+    result = merge_results(CodeQualityDetail(metric='quality'), [classified(3), classified(5)],
+                           DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v1')
+    assert result.details['classification_consensus']['threshold_disagreement']
+    assert result.details['review_required']
+    assert not result.status
+    assert result.label == ['QUALITY_GOOD']
+
+
+def test_base_llm_failure_without_details_preserves_other_stage_findings():
+    quality = EvalDetail(metric='LLMCodeQualityV1', applicable=False,
+                         not_applicable_kind='execution_error', label=['REVIEW_EXECUTION_ERROR.ConvertJsonError'])
+    result = merge_results(quality, [classified(2), classified(5)], DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v2')
+    assert not result.applicable
+    assert result.score is None
+    assert result.label == ['Effectiveness.Low_Code_Content', 'REVIEW_EXECUTION_ERROR.quality']
+    assert result.details['quality']['label'] == ['REVIEW_EXECUTION_ERROR.ConvertJsonError']
+
+
+def test_good_pipeline_result_is_exported_without_losing_source_fields(tmp_path):
+    from pathlib import Path
+
+    from examples.code_quality.evaluate_code_executor import export_final
+
+    result = merge_results(CodeQualityDetail(metric='quality'), [classified(4), classified(5)],
+                           DEFAULT_CLASSIFICATION_MODELS, 'LLMCodeQualityPipeline', 'v1')
+    row = {'sample_id': 'good', 'content': 'print(1)', 'doc_url': 's3://bucket/key?bytes=0,1',
+           'extra': {'keep': True}, '_code_qc': {'category': 'web', 'language': 'en'}}
+    record = {'dingo_id': 'good', 'raw_data': row, 'eval_status': result.status,
+              'eval_details': {'content': [result.model_dump()]}}
+    config = InputArgs(executor={'result_save': {'bad': True, 'good': True, 'all_labels': True}})
+    summary = export_final(tmp_path, [row], {'good': record}, config)
+    assert summary['good'] == 1 and summary['automatic_candidates'] == 0
+    saved = json.loads((Path(summary['output_path']) / 'content/QUALITY_GOOD.jsonl').read_text(encoding='utf-8'))
+    assert saved['raw_data'] == row
+    assert saved['eval_details']['content'][0]['label'] == ['QUALITY_GOOD']
+    assert saved['eval_details']['content'][0]['details']['all_labels'] == []
+
+
+@pytest.mark.parametrize('quality_failure', [False, True])
+def test_executor_full_pipeline_calls_stages_and_writes_results(tmp_path, monkeypatch, quality_failure):
+    monkeypatch.setenv('LOCAL_DEPLOYMENT_MODE', 'true')
+    calls = []
+
+    def quality(cls, data):
+        calls.append(('quality', cls.dynamic_config.model))
+        assert 'classification_models' not in (cls.dynamic_config.model_extra or {})
+        assert cls.dynamic_config.model_extra['extra_headers']['X-Session-ID'].endswith('-quality')
+        if quality_failure:
+            return CodeQualityDetail(metric='quality', applicable=False, label=['REVIEW_EXECUTION_ERROR.Timeout'])
+        return CodeQualityDetail(metric='quality', details={'findings': [
+            {'type': 'Security', 'name': 'Secret_Credentials', 'reason': 'LLM candidate [REDACTED]',
+             'line_start': 1, 'line_end': 1}]})
+
+    def classification(cls, data):
+        calls.append(('classification', cls.dynamic_config.model))
+        return classified(2 if cls.dynamic_config.model == DEFAULT_CLASSIFICATION_MODELS[0] else 5)
+
+    monkeypatch.setattr(LLMCodeQualityV1, 'eval', classmethod(quality))
+    monkeypatch.setattr(LLMCodeClassificationV1, 'eval', classmethod(classification))
+    source = tmp_path / 'input.jsonl'
+    source.write_text(json.dumps({'sample_id': 'one', 'content': 'print(1)'}) + '\n', encoding='utf-8')
+    config = InputArgs(input_path=str(source), output_path=str(tmp_path / 'results'),
+                       dataset={'source': 'local', 'format': 'jsonl'},
+                       executor={'max_workers': 1, 'batch_size': 1, 'result_save': {'bad': True, 'good': True, 'all_labels': True}},
+                       evaluator=[{'fields': {'content': 'content'}, 'evals': [{'name': 'LLMCodeQualityPipeline', 'config': {'model': 'quality-model'}}]}])
+    summary = LocalExecutor(config).execute()
+    from pathlib import Path
+    folder = Path(summary.output_path) / 'content'
+    low = folder / 'Effectiveness/Low_Code_Content.jsonl'
+    assert low.exists()
+    result = json.loads(low.read_text(encoding='utf-8'))['eval_details']['content'][0]
+    assert result['applicable'] is not quality_failure
+    assert (folder / 'Security/Secret_Credentials.jsonl').exists() is not quality_failure
+    assert (folder / 'REVIEW_EXECUTION_ERROR/quality.jsonl').exists() is quality_failure
+    assert len(calls) == 3
+    assert [model for stage, model in calls if stage == 'classification'] == list(DEFAULT_CLASSIFICATION_MODELS)
+
+
+def test_pipeline_closes_all_llm_clients(monkeypatch):
+    clients = []
+    from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
+
+    def configure(evaluator, config):
+        client = SimpleNamespace(closed=False)
+        client.close = lambda: setattr(client, 'closed', True)
+        clients.append(client)
+        result = classified(4) if evaluator is LLMCodeClassificationV1 else CodeQualityDetail(metric='quality')
+        return SimpleNamespace(client=client, eval=lambda data: result)
+
+    monkeypatch.setattr(pipeline, 'configured_evaluator', configure)
+    judge = configured_evaluator(LLMCodeQualityPipeline, {'model': 'offline'})
+    assert judge.eval(Data(content='print(1)')).applicable
+    assert len(clients) == 3 and all(client.closed for client in clients)

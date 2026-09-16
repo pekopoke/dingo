@@ -470,3 +470,76 @@ class TestLocal:
         assert result.metrics_score_stats["field1"]["TestMetric1"]["score_average"] == 8.5
         assert result.metrics_score_stats["field1"]["TestMetric2"]["score_average"] == 6.5
         assert result.get_metrics_score_overall_average("field1") == 7.5
+
+
+def test_classmethod_llm_configs_are_isolated_between_concurrent_calls(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from dingo.config.input_args import EvaluatorLLMArgs
+    from dingo.model.llm.base_openai import BaseOpenAI
+
+    barrier = Barrier(2)
+    clients = []
+
+    class Client:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    class IsolatedTestLLM(BaseOpenAI):
+        dynamic_config = EvaluatorLLMArgs()
+
+        @classmethod
+        def eval(cls, data):
+            cls.client = Client()
+            clients.append(cls.client)
+            barrier.wait(timeout=5)
+            return EvalDetail(metric=cls.__name__, score=1, label=['QUALITY_GOOD'],
+                              reason=[cls.dynamic_config.model])
+
+    monkeypatch.setitem(Model.llm_name_map, 'IsolatedTestLLM', IsolatedTestLLM)
+    config = InputArgs(executor={'result_save': {'good': True, 'all_labels': True}})
+    executor = LocalExecutor(config)
+
+    def run(name):
+        entry = InputArgs(evaluator=[{'evals': [{'name': 'IsolatedTestLLM', 'config': {'model': name}}]}]).evaluator[0].evals
+        result = executor.evaluate_single_data(name, {'content': 'content'}, 'llm', {'content': 'text'}, entry)
+        return result.eval_details['content'][0].reason
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(run, ['model-a', 'model-b'])) == [['model-a'], ['model-b']]
+    assert IsolatedTestLLM.dynamic_config.model is None
+    assert IsolatedTestLLM.client is None
+    assert len(clients) == 2 and all(client.closed for client in clients)
+
+
+def test_instance_llm_classmethod_helpers_read_isolated_config(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from dingo.model.llm.llm_custom_metric import LLMCustomMetric
+
+    barrier = Barrier(2)
+    original = LLMCustomMetric.dynamic_config.model_dump()
+
+    def evaluate(self, data):
+        barrier.wait(timeout=5)
+        return EvalDetail(metric='custom', label=['QUALITY_GOOD'], reason=[{
+            'request': self.get_request_extra_params(), 'timeout': self.get_local_config_value('request_timeout')}])
+
+    monkeypatch.setattr(LLMCustomMetric, 'eval', evaluate)
+    executor = LocalExecutor(InputArgs(executor={'result_save': {'all_labels': True}}))
+
+    def run(value):
+        entries = InputArgs(evaluator=[{'evals': [{'name': 'LLMCustomMetric', 'config': {
+            'temperature': value / 10, 'max_tokens': value * 100, 'request_timeout': value}}]}]).evaluator[0].evals
+        result = executor.evaluate_single_data(str(value), {}, 'llm', {'content': 'test'}, entries)
+        return result.eval_details['default'][0].reason[0]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(run, [1, 2]))
+    assert results == [{'request': {'temperature': .1, 'max_tokens': 100}, 'timeout': 1},
+                       {'request': {'temperature': .2, 'max_tokens': 200}, 'timeout': 2}]
+    assert LLMCustomMetric.dynamic_config.model_dump() == original
