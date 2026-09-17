@@ -13,7 +13,7 @@ def test_v7_is_registered_with_a_self_contained_prompt():
     assert "_build_multi_label_prompt" not in source
     assert "# Role" in LLMTextQualityV7.prompt
     assert "# Input content to evaluate:" in LLMTextQualityV7.prompt
-    assert '"feature"' in LLMTextQualityV7.prompt
+    assert '"statistics"' in LLMTextQualityV7.prompt
     assert '"formula_count"' in LLMTextQualityV7.prompt
     assert '"table_count"' in LLMTextQualityV7.prompt
     assert '"code_count"' in LLMTextQualityV7.prompt

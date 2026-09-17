@@ -32,7 +32,7 @@ class EvalDetail(BaseModel):
     label: Optional[list[str]] = None
     reason: Optional[list] = None
     usage: Optional[TokenUsage] = None
-    feature: Optional[Dict[str, int]] = None
+    statistics: Optional[Dict[str, int]] = None
 
     # 评审引擎判定契约（spec §4.2/§7.3）。旧评估器不设时全部回退，行为不变。
     verdict: Optional[str] = None          # "pass" | "warning" | "issue"
