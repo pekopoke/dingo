@@ -78,6 +78,28 @@ def test_structured_response_rejects_invalid_statistics(invalid_count):
         LLMTextQualityV7.process_response(response)
 
 
+def test_structured_response_rejects_non_structure_statistics():
+    response = json.dumps({
+        "statistics": {
+            "formula_count": 0,
+            "table_count": 0,
+            "code_count": 0,
+            "Words_Stuck": 1,
+        },
+        "findings": [
+            {
+                "score": 0,
+                "type": "Effectiveness",
+                "name": "Words_Stuck",
+                "reason": "Missing word boundaries",
+            }
+        ],
+    })
+
+    with pytest.raises(ValueError, match="unsupported fields: Words_Stuck"):
+        LLMTextQualityV7.process_response(response)
+
+
 @pytest.mark.parametrize("response", [
     "[]",
     '{"score": 1, "type": "Good", "name": "None", "reason": "Clear text"}',

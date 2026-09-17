@@ -6,6 +6,36 @@ from dingo.model.llm.text_quality.base_text_quality_v2 import BaseTextQualityV2
 class LLMTextQualityV7(BaseTextQualityV2):
     """Multi-label text quality evaluator with a self-contained prompt."""
 
+    _statistics_fields = (
+        "formula_count",
+        "table_count",
+        "code_count",
+        "error_formula_count",
+        "error_table_count",
+        "error_code_count",
+        "Formula_Missing",
+        "Formula_Partial_Loss",
+        "Formula_Token_Corruption",
+        "Formula_Unparseable",
+        "Formula_Structure_Corruption",
+        "Formula_Layout_Corruption",
+        "Formula_Extra_Content",
+        "Table_Missing",
+        "Table_Unparseable",
+        "Table_Partial_Loss",
+        "Table_Cell_Corruption",
+        "Table_Header_Corruption",
+        "Table_Structure_Corruption",
+        "Table_Layout_Corruption",
+        "Table_Extra_Content",
+        "Code_Missing",
+        "Code_Unparseable",
+        "Code_Partial_Loss",
+        "Code_Token_Corruption",
+        "Code_Layout_Corruption",
+        "Code_Extra_Content",
+    )
+
     _metric_info = {
         "category": "Pretrain Text Quality Assessment Metrics",
         "metric_name": "LLMTextQualityV7",
@@ -390,6 +420,7 @@ Statistics rules:
 - Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. Include them in both the category total and its error count.
 - Count each defective structure only once in its error count even when it has multiple supported defect labels. Error counts measure defective structures, not labels or defect occurrences.
 - For every allowed `Formula_*`, `Table_*`, and `Code_*` label, return a same-named key in `statistics` containing the number of distinct structures with that label. Always return all label-count keys, using zero for labels that do not occur. For example, `"Formula_Token_Corruption": 3` means three formulas are affected, `"Table_Cell_Corruption": 2` means two tables are affected, and `"Code_Unparseable": 1` means one code structure is affected.
+- Do not add any other key to `statistics`. General findings such as `Words_Stuck`, `Garbled_Characters`, `Lack_Punctuation`, and `Duplication` belong only in `findings`, not in `statistics`.
 - Count a structure once under each applicable label. If one structure has two independent supported defects with different labels, it contributes one to each label count, while still contributing only one to its category's `error_*_count`.
 - `Formula_Missing`, `Table_Missing`, and `Code_Missing` count distinct explicitly missing structures even though those absent structures do not contribute to their category total or `error_*_count`.
 - Every positive label count requires the matching object in `findings`, and every `Formula_*`, `Table_*`, or `Code_*` finding requires a positive matching count. Each non-Missing label count must not exceed its corresponding category total.
