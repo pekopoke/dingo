@@ -142,13 +142,13 @@ class LocalExecutor(ExecProto):
                                     field_key, eval_detail.metric, eval_detail.usage
                                 )
 
-                    for field_key, eval_detail_list in result_info.feature_details.items():
+                    for field_key, eval_detail_list in result_info.statistics_details.items():
                         for eval_detail in eval_detail_list:
-                            if eval_detail.feature is not None and eval_detail.metric:
-                                self.summary.add_feature(
+                            if eval_detail.statistics is not None and eval_detail.metric:
+                                self.summary.add_statistics(
                                     field_key,
                                     eval_detail.metric,
-                                    eval_detail.feature,
+                                    eval_detail.statistics,
                                 )
 
                     if result_info.eval_status:
@@ -230,12 +230,12 @@ class LocalExecutor(ExecProto):
         usage_detail_list = [mr for mr in eval_detail_list if mr.usage is not None]
         if usage_detail_list:
             result_info.token_usage_details = {join_fields: usage_detail_list}
-        feature_detail_list = [
-            mr for mr in eval_detail_list if mr.feature is not None
+        statistics_detail_list = [
+            mr for mr in eval_detail_list if mr.statistics is not None
         ]
-        if feature_detail_list:
-            result_info.feature_details = {
-                join_fields: feature_detail_list
+        if statistics_detail_list:
+            result_info.statistics_details = {
+                join_fields: statistics_detail_list
             }
 
         # 根据配置决定保存哪些结果
@@ -276,11 +276,11 @@ class LocalExecutor(ExecProto):
                 else:
                     existing_item.token_usage_details[key] = value
 
-            for key, value in new_item.feature_details.items():
-                if key in existing_item.feature_details:
-                    existing_item.feature_details[key].extend(value)
+            for key, value in new_item.statistics_details.items():
+                if key in existing_item.statistics_details:
+                    existing_item.statistics_details[key].extend(value)
                 else:
-                    existing_item.feature_details[key] = value
+                    existing_item.statistics_details[key] = value
         else:
             existing_list.append(new_item)
 

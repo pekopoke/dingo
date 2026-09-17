@@ -80,7 +80,7 @@ class SparkExecutor(ExecProto):
     def _aggregate_eval_details(acc, item):
         """聚合单个 item 的 eval_details 到累加器中，同时收集 scores"""
         eval_details_dict = item.get('eval_details', {})
-        feature_details = item.get('_feature_details', {})
+        statistics_details = item.get('_statistics_details', {})
 
         # 遍历第一层：字段名，第二层是 List[EvalDetail] (序列化为 list of dicts)
         for field_key, eval_detail_list in eval_details_dict.items():
@@ -115,20 +115,20 @@ class SparkExecutor(ExecProto):
                 else:
                     acc['label_counts'][field_key][label] += 1
 
-        feature_counts = acc.setdefault('features', {})
-        for field_key, eval_detail_list in feature_details.items():
-            field_counts = feature_counts.setdefault(field_key, {})
+        statistics_counts = acc.setdefault('statistics', {})
+        for field_key, eval_detail_list in statistics_details.items():
+            field_counts = statistics_counts.setdefault(field_key, {})
             for eval_detail in eval_detail_list:
                 if isinstance(eval_detail, dict):
                     metric = eval_detail.get('metric')
-                    feature = eval_detail.get('feature')
+                    statistics = eval_detail.get('statistics')
                 else:
                     metric = eval_detail.metric
-                    feature = eval_detail.feature
-                if not metric or feature is None:
+                    statistics = eval_detail.statistics
+                if not metric or statistics is None:
                     continue
                 metric_counts = field_counts.setdefault(metric, {})
-                for name, count in feature.items():
+                for name, count in statistics.items():
                     metric_counts[name] = metric_counts.get(name, 0) + count
 
         return acc
@@ -157,12 +157,12 @@ class SparkExecutor(ExecProto):
                 else:
                     acc1['metric_scores'][field_key][metric].extend(scores)
 
-        target_feature_counts = acc1.setdefault('features', {})
-        for field_key, metrics_dict in acc2.get('features', {}).items():
-            target = target_feature_counts.setdefault(field_key, {})
-            for metric, feature in metrics_dict.items():
+        target_statistics_counts = acc1.setdefault('statistics', {})
+        for field_key, metrics_dict in acc2.get('statistics', {}).items():
+            target = target_statistics_counts.setdefault(field_key, {})
+            for metric, statistics in metrics_dict.items():
                 metric_counts = target.setdefault(metric, {})
-                for name, count in feature.items():
+                for name, count in statistics.items():
                     metric_counts[name] = metric_counts.get(name, 0) + count
 
         return acc1
@@ -254,19 +254,19 @@ class SparkExecutor(ExecProto):
                     else:
                         result_info.eval_details[k].extend(v)
 
-                for k, v in r_i.feature_details.items():
-                    if k not in result_info.feature_details:
-                        result_info.feature_details[k] = v
+                for k, v in r_i.statistics_details.items():
+                    if k not in result_info.statistics_details:
+                        result_info.statistics_details[k] = v
                     else:
-                        result_info.feature_details[k].extend(v)
+                        result_info.statistics_details[k].extend(v)
 
         result = result_info.to_dict()
-        result['_feature_details'] = {
+        result['_statistics_details'] = {
             field_key: [
-                {"metric": item.metric, "feature": item.feature}
+                {"metric": item.metric, "statistics": item.statistics}
                 for item in eval_detail_list
             ]
-            for field_key, eval_detail_list in result_info.feature_details.items()
+            for field_key, eval_detail_list in result_info.statistics_details.items()
         }
         return result
 
@@ -298,12 +298,12 @@ class SparkExecutor(ExecProto):
 
         # Set result_info fields
         join_fields = ','.join(eval_fields.values()) if eval_fields else 'default'
-        feature_detail_list = [
-            item for item in eval_detail_list if item.feature is not None
+        statistics_detail_list = [
+            item for item in eval_detail_list if item.statistics is not None
         ]
-        if feature_detail_list:
-            result_info.feature_details = {
-                join_fields: feature_detail_list
+        if statistics_detail_list:
+            result_info.statistics_details = {
+                join_fields: statistics_detail_list
             }
 
         # Decide which results to save based on configuration
@@ -342,18 +342,18 @@ class SparkExecutor(ExecProto):
                 {
                     'label_counts': {},
                     'metric_scores': {},
-                    'features': {},
+                    'statistics': {},
                 },  # 初始累加器
                 SparkExecutor._aggregate_eval_details,  # 聚合单个元素
                 SparkExecutor._merge_eval_details  # 合并累加器
             )
             type_ratio_counts = aggregated_results['label_counts']
             metric_scores = aggregated_results['metric_scores']
-            features = aggregated_results['features']
+            statistics = aggregated_results['statistics']
         else:
             type_ratio_counts = {}
             metric_scores = {}
-            features = {}
+            statistics = {}
 
         # 将计数转换为比例
         new_summary.type_ratio = {}
@@ -370,12 +370,12 @@ class SparkExecutor(ExecProto):
                 for score in scores:
                     new_summary.add_metric_score(field_key, metric_name, score)
 
-        for field_key, metrics in features.items():
-            for metric_name, feature in metrics.items():
-                new_summary.add_feature(
+        for field_key, metrics in statistics.items():
+            for metric_name, metric_statistics in metrics.items():
+                new_summary.add_statistics(
                     field_key,
                     metric_name,
-                    feature,
+                    metric_statistics,
                 )
 
         # 计算 metrics 的平均分等统计信息

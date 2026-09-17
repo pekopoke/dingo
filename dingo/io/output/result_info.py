@@ -19,7 +19,7 @@ class ResultInfo(BaseModel):
         default_factory=dict,
         exclude=True,
     )
-    feature_details: Dict[str, List[EvalDetail]] = Field(
+    statistics_details: Dict[str, List[EvalDetail]] = Field(
         default_factory=dict,
         exclude=True,
     )
@@ -29,8 +29,8 @@ class ResultInfo(BaseModel):
         detail = model_res.model_dump()
         if detail.get('usage') is None:
             detail.pop('usage', None)
-        if detail.get('feature') is None:
-            detail.pop('feature', None)
+        if detail.get('statistics') is None:
+            detail.pop('statistics', None)
         return detail
 
     @staticmethod

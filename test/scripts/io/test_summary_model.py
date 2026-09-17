@@ -344,21 +344,21 @@ class TestSummaryModel:
         assert "providers" not in stats
         assert stats["sources"] == {"provider": 2}
 
-    def test_add_feature_and_to_dict(self):
+    def test_add_statistics_and_to_dict(self):
         summary = SummaryModel(task_name="test_task")
 
-        summary.add_feature(
+        summary.add_statistics(
             "content",
             "ExampleMetric",
             {"formula_count": 2, "code_count": 1},
         )
-        summary.add_feature(
+        summary.add_statistics(
             "content",
             "ExampleMetric",
             {"formula_count": 3, "code_count": 4},
         )
 
-        assert summary.to_dict()["feature"] == {
+        assert summary.to_dict()["statistics"] == {
             "content": {
                 "ExampleMetric": {
                     "formula_count": 5,

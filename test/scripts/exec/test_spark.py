@@ -81,14 +81,14 @@ class TestSparkExecutor:
         assert result['label_counts']['field1']['good'] == 3
         assert result['label_counts']['field1']['bad'] == 1
 
-    def test_features_are_aggregated_and_merged(self):
+    def test_statistics_are_aggregated_and_merged(self):
         item = {
             "eval_details": {},
-            "_feature_details": {
+            "_statistics_details": {
                 "content": [
                     EvalDetail(
                         metric="ExampleMetric",
-                        feature={"items": 2},
+                        statistics={"items": 2},
                     )
                 ]
             },
@@ -96,19 +96,19 @@ class TestSparkExecutor:
         left = {
             "label_counts": {},
             "metric_scores": {},
-            "features": {},
+            "statistics": {},
         }
         right = {
             "label_counts": {},
             "metric_scores": {},
-            "features": {},
+            "statistics": {},
         }
 
         left = SparkExecutor._aggregate_eval_details(left, item)
         right = SparkExecutor._aggregate_eval_details(right, item)
         result = SparkExecutor._merge_eval_details(left, right)
 
-        assert result["features"]["content"]["ExampleMetric"]["items"] == 4
+        assert result["statistics"]["content"]["ExampleMetric"]["items"] == 4
 
     def test_full_aggregation_workflow(self):
         """测试完整的聚合工作流程（模拟实际的 Spark 聚合）"""

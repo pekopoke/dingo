@@ -9,7 +9,7 @@ from dingo.model.response.response_class import ResponseScoreTypeNameReason
 
 
 class BaseTextQualityV2(BaseOpenAI):
-    """Parse quality findings and optional feature counts into an ``EvalDetail``."""
+    """Parse quality findings and optional statistics into an ``EvalDetail``."""
 
     _required_fields = [RequiredField.CONTENT]
 
@@ -24,13 +24,13 @@ class BaseTextQualityV2(BaseOpenAI):
             response = response.rstrip()[:-3]
 
         response_json = json.loads(response.strip())
-        feature = None
+        statistics = None
         if isinstance(response_json, dict):
-            feature = response_json.get("feature")
+            statistics = response_json.get("statistics")
             response_json = response_json.get("findings")
-            if not isinstance(feature, dict):
-                raise ValueError("feature must be a JSON object")
-            for name, count in feature.items():
+            if not isinstance(statistics, dict):
+                raise ValueError("statistics must be a JSON object")
+            for name, count in statistics.items():
                 if (
                     not isinstance(name, str)
                     or isinstance(count, bool)
@@ -38,7 +38,7 @@ class BaseTextQualityV2(BaseOpenAI):
                     or count < 0
                 ):
                     raise ValueError(
-                        "feature must map string names to non-negative integers"
+                        "statistics must map string names to non-negative integers"
                     )
 
         if not isinstance(response_json, list) or not response_json:
@@ -58,7 +58,7 @@ class BaseTextQualityV2(BaseOpenAI):
                 score=1,
                 label=["QUALITY_GOOD"],
                 reason=[good.reason],
-                feature=feature,
+                statistics=statistics,
             )
 
         if good_findings:
@@ -75,5 +75,5 @@ class BaseTextQualityV2(BaseOpenAI):
             score=0,
             label=[f"{item.type}.{item.name}" for item in bad_findings],
             reason=[item.reason for item in bad_findings],
-            feature=feature,
+            statistics=statistics,
         )
