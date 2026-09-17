@@ -12,6 +12,7 @@ class BaseTextQualityV2(BaseOpenAI):
     """Parse quality findings and optional statistics into an ``EvalDetail``."""
 
     _required_fields = [RequiredField.CONTENT]
+    _statistics_fields = None
 
     @classmethod
     def process_response(cls, response: str) -> EvalDetail:
@@ -39,6 +40,13 @@ class BaseTextQualityV2(BaseOpenAI):
                 ):
                     raise ValueError(
                         "statistics must map string names to non-negative integers"
+                    )
+            if cls._statistics_fields is not None:
+                unexpected_fields = set(statistics) - set(cls._statistics_fields)
+                if unexpected_fields:
+                    raise ValueError(
+                        "statistics contains unsupported fields: "
+                        + ", ".join(sorted(unexpected_fields))
                     )
 
         if not isinstance(response_json, list) or not response_json:
