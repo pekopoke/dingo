@@ -430,6 +430,7 @@ AUTHOR_CJK_WHITESPACE_NAMES_RE = re.compile(
 OA_BOOL_VALUES = {"true", "false", "unknown"}
 METADATA_TYPE_VALUES = {"paper", "ebook"}
 OA_STATUS_VALUES = {"diamond", "gold", "green", "hybrid", "bronze", "closed", ""}
+OPEN_OA_STATUS_VALUES = {"diamond", "gold", "green", "hybrid", "bronze"}
 LOC_TYPE_VALUES = {"download", "reader", "display", ""}
 JSON_LIST_FIELDS = {
     "isbns",
@@ -1339,7 +1340,13 @@ def check_locations(locations: Any) -> ValidationResult:
     return _ok()
 
 
-def check_access_is_oa(access_is_oa: Any, metadata_type: Any) -> ValidationResult:
+def check_access_is_oa(
+    access_is_oa: Any,
+    metadata_type: Any,
+    access_oa_status: Any = None,
+    access_oa_url: Any = None,
+    access_license: Any = None,
+) -> ValidationResult:
     if metadata_type not in METADATA_TYPE_VALUES:
         return _ok()
     required = metadata_type == "paper"
@@ -1351,7 +1358,43 @@ def check_access_is_oa(access_is_oa: Any, metadata_type: Any) -> ValidationResul
         return _fail("empty", "value cannot be empty string when metadata_type='paper'") if required else _ok()
     if access_is_oa not in OA_BOOL_VALUES:
         return _fail("unsupported_value", f"unsupported value '{access_is_oa}'")
-    return _ok()
+
+    error_labels: list[str] = []
+    reasons: list[str] = []
+
+    # Only apply consistency rules to otherwise valid dependent values. Their
+    # own validators report null, type, enum and URL-format errors separately.
+    status_is_valid = isinstance(access_oa_status, str) and access_oa_status in OA_STATUS_VALUES
+    url_is_string_list = isinstance(access_oa_url, list) and all(
+        isinstance(item, str) for item in access_oa_url
+    )
+    license_is_valid = isinstance(access_license, str) and access_license in ACCESS_LICENSE_VALUES
+
+    if access_is_oa == "true":
+        if status_is_valid and access_oa_status not in OPEN_OA_STATUS_VALUES:
+            error_labels.append("oa_status_mismatch")
+            reasons.append(
+                "access_oa_status must be one of diamond, gold, green, hybrid or bronze "
+                "when access_is_oa='true'"
+            )
+        if url_is_string_list and not any(URL_RE.fullmatch(item) for item in access_oa_url):
+            error_labels.append("oa_url_mismatch")
+            reasons.append("access_oa_url must contain at least one valid URL when access_is_oa='true'")
+    else:
+        expected_status = "closed" if access_is_oa == "false" else ""
+        if status_is_valid and access_oa_status != expected_status:
+            error_labels.append("oa_status_mismatch")
+            reasons.append(
+                f"access_oa_status must be '{expected_status}' when access_is_oa='{access_is_oa}'"
+            )
+        if url_is_string_list and access_oa_url != []:
+            error_labels.append("oa_url_mismatch")
+            reasons.append(f"access_oa_url must be empty when access_is_oa='{access_is_oa}'")
+        if license_is_valid and access_license != "":
+            error_labels.append("license_mismatch")
+            reasons.append(f"access_license must be empty when access_is_oa='{access_is_oa}'")
+
+    return bool(error_labels), error_labels, reasons
 
 
 def check_access_oa_status(access_oa_status: Any) -> ValidationResult:
@@ -1772,7 +1815,13 @@ FIELD_VALIDATORS = {
     "author": lambda record: check_author(record.get("author")),
     "contributors": lambda record: check_contributors(record.get("contributors")),
     "locations": lambda record: check_locations(record.get("locations")),
-    "access_is_oa": lambda record: check_access_is_oa(record.get("access_is_oa"), record.get("metadata_type")),
+    "access_is_oa": lambda record: check_access_is_oa(
+        record.get("access_is_oa"),
+        record.get("metadata_type"),
+        record.get("access_oa_status"),
+        record.get("access_oa_url"),
+        record.get("access_license"),
+    ),
     "access_oa_status": lambda record: check_access_oa_status(record.get("access_oa_status")),
     "access_oa_url": lambda record: check_access_oa_url(record.get("access_oa_url")),
     "access_license": lambda record: check_access_license(record.get("access_license")),

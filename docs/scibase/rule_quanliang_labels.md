@@ -18,7 +18,7 @@
 | `author` | 10 |
 | `contributors` | 4 |
 | `locations` | 6 |
-| `access_is_oa` | 4 |
+| `access_is_oa` | 7 |
 | `access_oa_status` | 4 |
 | `access_oa_url` | 4 |
 | `access_license` | 4 |
@@ -225,6 +225,9 @@
 | `wrong_type` | 字段类型错误 | 值的类型不是字符串时标记。 |
 | `empty` | 值为空 | 若论文开放获取标记为空，则标记。 |
 | `unsupported_value` | 值不在限定范围内 | 值须属于 3 个限定值之一：`true`、`false`、`unknown`。 |
+| `oa_status_mismatch` | OA 状态不一致 | `true` 时状态须为 `diamond`、`gold`、`green`、`hybrid` 或 `bronze`；`false` 时须为 `closed`；`unknown` 时须为空。 |
+| `oa_url_mismatch` | OA URL 不一致 | `true` 时须至少包含一个有效 OA URL；`false` 或 `unknown` 时须为空数组。 |
+| `license_mismatch` | 许可证不一致 | `false` 或 `unknown` 时 `access_license` 须为空；`true` 时允许为空或使用受支持的许可证值。 |
 
 ## access_oa_status
 
