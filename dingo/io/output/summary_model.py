@@ -25,6 +25,7 @@ class SummaryModel(BaseModel):
     # 结构：{field_key: {metric_name: {scores, score_average, ...}}}
     metrics_score_stats: Dict[str, Dict[str, Dict[str, Any]]] = Field(default_factory=dict)
     token_usage_stats: Dict[str, Dict[str, Dict[str, Any]]] = Field(default_factory=dict)
+    statistics: Dict[str, Dict[str, Dict[str, int]]] = Field(default_factory=dict)
     input_args: Dict[str, Any] = Field(default_factory=dict)
 
     def add_metric_score(self, field_key: str, metric_name: str, score: float):
@@ -97,6 +98,20 @@ class SummaryModel(BaseModel):
             usage_stats['sources'][usage.source] = (
                 usage_stats['sources'].get(usage.source, 0) + calls
             )
+
+    def add_statistics(
+        self,
+        field_key: str,
+        metric_name: str,
+        statistics: Dict[str, int],
+    ):
+        """Add one evaluator's per-sample statistics to the summary."""
+        metric_counts = self.statistics.setdefault(field_key, {}).setdefault(
+            metric_name,
+            {},
+        )
+        for name, count in statistics.items():
+            metric_counts[name] = metric_counts.get(name, 0) + count
 
     def calculate_metrics_score_averages(self):
         """
@@ -195,6 +210,9 @@ class SummaryModel(BaseModel):
 
         if self.token_usage_stats:
             result['token_usage'] = self.token_usage_stats
+
+        if self.statistics:
+            result['statistics'] = self.statistics
 
         result['input_args'] = self.input_args
 

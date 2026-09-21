@@ -344,6 +344,29 @@ class TestSummaryModel:
         assert "providers" not in stats
         assert stats["sources"] == {"provider": 2}
 
+    def test_add_statistics_and_to_dict(self):
+        summary = SummaryModel(task_name="test_task")
+
+        summary.add_statistics(
+            "content",
+            "ExampleMetric",
+            {"formula_count": 2, "code_count": 1},
+        )
+        summary.add_statistics(
+            "content",
+            "ExampleMetric",
+            {"formula_count": 3, "code_count": 4},
+        )
+
+        assert summary.to_dict()["statistics"] == {
+            "content": {
+                "ExampleMetric": {
+                    "formula_count": 5,
+                    "code_count": 5,
+                }
+            }
+        }
+
     def test_multiple_metrics_different_score_counts(self):
         """测试不同指标有不同数量的分数"""
         summary = SummaryModel(

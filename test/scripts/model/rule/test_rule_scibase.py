@@ -6,6 +6,132 @@ from dingo.model.rule.scibase.rule_quanliang import RuleQuanliangFieldValidation
 
 
 class TestRuleQuanliangFieldValidation:
+    def test_access_oa_consistency_valid_combinations(self):
+        cases = [
+            {
+                "access_is_oa": "true",
+                "access_oa_status": "gold",
+                "access_oa_url": ["https://example.com/paper.pdf"],
+                "access_license": "",
+            },
+            {
+                "access_is_oa": "true",
+                "access_oa_status": "green",
+                "access_oa_url": ["https://example.com/paper.pdf"],
+                "access_license": "cc-by",
+            },
+            {
+                "access_is_oa": "false",
+                "access_oa_status": "closed",
+                "access_oa_url": [],
+                "access_license": "",
+            },
+            {
+                "access_is_oa": "unknown",
+                "access_oa_status": "",
+                "access_oa_url": [],
+                "access_license": "",
+            },
+        ]
+
+        for case in cases:
+            model = RuleQuanliangFieldValidation()
+            model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+            model.dynamic_config.key_list = [
+                "access_is_oa",
+                "access_oa_status",
+                "access_oa_url",
+                "access_license",
+            ]
+
+            result = model.eval(Data(metadata_type="paper", **case))
+
+            assert result.status is False, case
+            assert result.label == ["QUALITY_GOOD"], case
+
+    def test_access_oa_consistency_reports_all_mismatches(self):
+        cases = [
+            (
+                {
+                    "access_is_oa": "true",
+                    "access_oa_status": "closed",
+                    "access_oa_url": [],
+                    "access_license": "",
+                },
+                [
+                    "access_is_oa.oa_status_mismatch",
+                    "access_is_oa.oa_url_mismatch",
+                ],
+            ),
+            (
+                {
+                    "access_is_oa": "false",
+                    "access_oa_status": "gold",
+                    "access_oa_url": ["https://example.com/paper.pdf"],
+                    "access_license": "cc-by",
+                },
+                [
+                    "access_is_oa.oa_status_mismatch",
+                    "access_is_oa.oa_url_mismatch",
+                    "access_is_oa.license_mismatch",
+                ],
+            ),
+            (
+                {
+                    "access_is_oa": "unknown",
+                    "access_oa_status": "closed",
+                    "access_oa_url": ["https://example.com/paper.pdf"],
+                    "access_license": "mit",
+                },
+                [
+                    "access_is_oa.oa_status_mismatch",
+                    "access_is_oa.oa_url_mismatch",
+                    "access_is_oa.license_mismatch",
+                ],
+            ),
+        ]
+
+        for case, expected_labels in cases:
+            model = RuleQuanliangFieldValidation()
+            model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+            model.dynamic_config.key_list = [
+                "access_is_oa",
+                "access_oa_status",
+                "access_oa_url",
+                "access_license",
+            ]
+
+            result = model.eval(Data(metadata_type="paper", **case))
+
+            assert result.status is True, case
+            assert result.label == expected_labels, case
+
+    def test_access_oa_consistency_does_not_duplicate_basic_field_errors(self):
+        model = RuleQuanliangFieldValidation()
+        model.dynamic_config = model.dynamic_config.model_copy(deep=True)
+        model.dynamic_config.key_list = [
+            "access_is_oa",
+            "access_oa_status",
+            "access_oa_url",
+            "access_license",
+        ]
+
+        result = model.eval(
+            Data(
+                metadata_type="paper",
+                access_is_oa="false",
+                access_oa_status=None,
+                access_oa_url="not-a-list",
+                access_license="not-a-license",
+            )
+        )
+
+        assert result.label == [
+            "access_oa_status.null",
+            "access_oa_url.wrong_type",
+            "access_license.unsupported_value",
+        ]
+
     def test_author_quality_labels(self):
         model = RuleQuanliangFieldValidation()
         model.dynamic_config = model.dynamic_config.model_copy(deep=True)

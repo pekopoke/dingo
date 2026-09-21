@@ -9,9 +9,10 @@ from dingo.model.response.response_class import ResponseScoreTypeNameReason
 
 
 class BaseTextQualityV2(BaseOpenAI):
-    """Parse a JSON list of quality findings into one ``EvalDetail``."""
+    """Parse quality findings and optional statistics into an ``EvalDetail``."""
 
     _required_fields = [RequiredField.CONTENT]
+    _statistics_fields = None
 
     @classmethod
     def process_response(cls, response: str) -> EvalDetail:
@@ -24,6 +25,30 @@ class BaseTextQualityV2(BaseOpenAI):
             response = response.rstrip()[:-3]
 
         response_json = json.loads(response.strip())
+        statistics = None
+        if isinstance(response_json, dict):
+            statistics = response_json.get("statistics")
+            response_json = response_json.get("findings")
+            if not isinstance(statistics, dict):
+                raise ValueError("statistics must be a JSON object")
+            for name, count in statistics.items():
+                if (
+                    not isinstance(name, str)
+                    or isinstance(count, bool)
+                    or not isinstance(count, int)
+                    or count < 0
+                ):
+                    raise ValueError(
+                        "statistics must map string names to non-negative integers"
+                    )
+            if cls._statistics_fields is not None:
+                unexpected_fields = set(statistics) - set(cls._statistics_fields)
+                if unexpected_fields:
+                    raise ValueError(
+                        "statistics contains unsupported fields: "
+                        + ", ".join(sorted(unexpected_fields))
+                    )
+
         if not isinstance(response_json, list) or not response_json:
             raise ValueError("Text quality response must be a non-empty JSON list")
 
@@ -41,6 +66,7 @@ class BaseTextQualityV2(BaseOpenAI):
                 score=1,
                 label=["QUALITY_GOOD"],
                 reason=[good.reason],
+                statistics=statistics,
             )
 
         if good_findings:
@@ -57,4 +83,5 @@ class BaseTextQualityV2(BaseOpenAI):
             score=0,
             label=[f"{item.type}.{item.name}" for item in bad_findings],
             reason=[item.reason for item in bad_findings],
+            statistics=statistics,
         )

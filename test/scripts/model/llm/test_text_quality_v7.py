@@ -30,6 +30,76 @@ def test_good_response_is_a_single_item_list():
     assert result.reason == ["Clear text"]
 
 
+def test_structured_response_includes_statistics():
+    response = json.dumps({
+        "statistics": {
+            "formula_count": 2,
+            "table_count": 1,
+            "code_count": 3,
+        },
+        "findings": [
+            {
+                "score": 1,
+                "type": "Good",
+                "name": "None",
+                "reason": "All structures are intact",
+            }
+        ],
+    })
+
+    result = LLMTextQualityV7.process_response(response)
+
+    assert result.statistics == {
+        "formula_count": 2,
+        "table_count": 1,
+        "code_count": 3,
+    }
+
+
+@pytest.mark.parametrize("invalid_count", [-1, 1.5, True, "1"])
+def test_structured_response_rejects_invalid_statistics(invalid_count):
+    response = json.dumps({
+        "statistics": {
+            "formula_count": invalid_count,
+            "table_count": 0,
+            "code_count": 0,
+        },
+        "findings": [
+            {
+                "score": 1,
+                "type": "Good",
+                "name": "None",
+                "reason": "Clear text",
+            }
+        ],
+    })
+
+    with pytest.raises(ValueError):
+        LLMTextQualityV7.process_response(response)
+
+
+def test_structured_response_rejects_non_structure_statistics():
+    response = json.dumps({
+        "statistics": {
+            "formula_count": 0,
+            "table_count": 0,
+            "code_count": 0,
+            "Words_Stuck": 1,
+        },
+        "findings": [
+            {
+                "score": 0,
+                "type": "Effectiveness",
+                "name": "Words_Stuck",
+                "reason": "Missing word boundaries",
+            }
+        ],
+    })
+
+    with pytest.raises(ValueError, match="unsupported fields: Words_Stuck"):
+        LLMTextQualityV7.process_response(response)
+
+
 @pytest.mark.parametrize("response", [
     "[]",
     '{"score": 1, "type": "Good", "name": "None", "reason": "Clear text"}',

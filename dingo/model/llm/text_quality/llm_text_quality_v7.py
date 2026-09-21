@@ -6,10 +6,40 @@ from dingo.model.llm.text_quality.base_text_quality_v2 import BaseTextQualityV2
 class LLMTextQualityV7(BaseTextQualityV2):
     """Multi-label text quality evaluator with a self-contained prompt."""
 
+    _statistics_fields = (
+        "formula_count",
+        "table_count",
+        "code_count",
+        "error_formula_count",
+        "error_table_count",
+        "error_code_count",
+        "Formula_Missing",
+        "Formula_Partial_Loss",
+        "Formula_Token_Corruption",
+        "Formula_Unparseable",
+        "Formula_Structure_Corruption",
+        "Formula_Layout_Corruption",
+        "Formula_Extra_Content",
+        "Table_Missing",
+        "Table_Unparseable",
+        "Table_Partial_Loss",
+        "Table_Cell_Corruption",
+        "Table_Header_Corruption",
+        "Table_Structure_Corruption",
+        "Table_Layout_Corruption",
+        "Table_Extra_Content",
+        "Code_Missing",
+        "Code_Unparseable",
+        "Code_Partial_Loss",
+        "Code_Token_Corruption",
+        "Code_Layout_Corruption",
+        "Code_Extra_Content",
+    )
+
     _metric_info = {
         "category": "Pretrain Text Quality Assessment Metrics",
         "metric_name": "LLMTextQualityV7",
-        "description": "Checks formula, table, code, readability, duplication, and safety in detail. Unlike V6, it supports multiple findings.",
+        "description": "Checks formula, table, code, readability, duplication, and safety in detail. Unlike V6, it supports multiple findings and counts formula, table, and code structures.",
         "paper_title": "WanJuanSiLu: A High-Quality Open-Source Webtext Dataset for Low-Resource Languages",
         "paper_url": "https://arxiv.org/abs/2501.14506",
         "paper_authors": "Yu et al., 2025",
@@ -360,11 +390,12 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 # Workflow
 
 1. **Detect Context**: Identify the language/script and whether the input is prose, list, table, code, math, metadata, or mixed content
-2. **Quick Scan**: Is the text generally readable, coherent, and structurally recoverable?
-3. **Collect Evidence**: Locate explicit defects and check label-specific thresholds and exclusions
-4. **Identify Defects**: Collect every distinct label whose threshold is independently met.
-5. **Verify Impact**: Would this issue meaningfully harm model training rather than merely reduce stylistic quality?
-6. **Assign Labels**:
+2. **Collect Statistics**: Count each distinct formula, table, and code structure, then count how many distinct present structures in each category have at least one supported defect
+3. **Quick Scan**: Is the text generally readable, coherent, and structurally recoverable?
+4. **Collect Evidence**: Locate explicit defects and check label-specific thresholds and exclusions
+5. **Identify Defects**: Collect every distinct label whose threshold is independently met.
+6. **Verify Impact**: Would this issue meaningfully harm model training rather than merely reduce stylistic quality?
+7. **Assign Labels**:
    - Return one object per supported defect, each with score 0
    - If no defect is supported, return exactly one Good object with score 1
    - Type: 'Good' OR one of ['Completeness', 'Effectiveness', 'Similarity', 'Security']
@@ -374,7 +405,30 @@ Evaluate whether this text is suitable for LLM pretraining. Flag only clear, mat
 ---
 
 # Output Format
-Return a non-empty JSON array only: [{"score": 0/1, "type": "", "name": "", "reason": ""}]
+Return one JSON object only:
+{"statistics": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0, "Formula_Missing": 0, "Formula_Partial_Loss": 0, "Formula_Token_Corruption": 0, "Formula_Unparseable": 0, "Formula_Structure_Corruption": 0, "Formula_Layout_Corruption": 0, "Formula_Extra_Content": 0, "Table_Missing": 0, "Table_Unparseable": 0, "Table_Partial_Loss": 0, "Table_Cell_Corruption": 0, "Table_Header_Corruption": 0, "Table_Structure_Corruption": 0, "Table_Layout_Corruption": 0, "Table_Extra_Content": 0, "Code_Missing": 0, "Code_Unparseable": 0, "Code_Partial_Loss": 0, "Code_Token_Corruption": 0, "Code_Layout_Corruption": 0, "Code_Extra_Content": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+
+Statistics rules:
+- Count only structures in the input content after `# Input content to evaluate:`; never count structures shown in this prompt or its examples.
+- `formula_count`: Count each distinct inline formula, display equation, equation environment, MathML formula, chemical formula, or formula-like scientific expression as one. A multi-line equation environment is one formula structure.
+- `table_count`: Count each complete or partial logical table as one, regardless of its number of rows, columns, or markup blocks.
+- `code_count`: Count each distinct code, script, configuration, JSON, XML, or other machine-readable snippet as one. A fenced block is one code structure.
+- `error_formula_count`: Count distinct present formula structures that have at least one supported `Formula_*` defect.
+- `error_table_count`: Count distinct present table structures that have at least one supported `Table_*` defect.
+- `error_code_count`: Count distinct present code structures that have at least one supported `Code_*` defect.
+- Classify by semantic purpose: table markup counts as a table rather than code, and formula markup counts as a formula rather than code. Do not double-count the same structure across categories.
+- Count defective, partial, and unparseable structures as present when their boundaries or surviving content identify them. Include them in both the category total and its error count.
+- Count each defective structure only once in its error count even when it has multiple supported defect labels. Error counts measure defective structures, not labels or defect occurrences.
+- For every allowed `Formula_*`, `Table_*`, and `Code_*` label, return a same-named key in `statistics` containing the number of distinct structures with that label. Always return all label-count keys, using zero for labels that do not occur. For example, `"Formula_Token_Corruption": 3` means three formulas are affected, `"Table_Cell_Corruption": 2` means two tables are affected, and `"Code_Unparseable": 1` means one code structure is affected.
+- Do not add any other key to `statistics`. General findings such as `Words_Stuck`, `Garbled_Characters`, `Lack_Punctuation`, and `Duplication` belong only in `findings`, not in `statistics`.
+- Count a structure once under each applicable label. If one structure has two independent supported defects with different labels, it contributes one to each label count, while still contributing only one to its category's `error_*_count`.
+- `Formula_Missing`, `Table_Missing`, and `Code_Missing` count distinct explicitly missing structures even though those absent structures do not contribute to their category total or `error_*_count`.
+- Every positive label count requires the matching object in `findings`, and every `Formula_*`, `Table_*`, or `Code_*` finding requires a positive matching count. Each non-Missing label count must not exceed its corresponding category total.
+- A completely missing structure represented only by prose, a caption, or a placeholder contributes zero to both its category total and its error count. A `Formula_Missing`, `Table_Missing`, or `Code_Missing` finding alone therefore does not increase an error count.
+- Each error count must be less than or equal to its corresponding total count.
+- If an error count is greater than zero, `findings` must contain at least one matching non-Missing defect label for that category. Conversely, a supported non-Missing `Formula_*`, `Table_*`, or `Code_*` finding requires at least one error structure in that category.
+- If `findings` contains only the Good object, all three error counts must be zero.
+- All six counts must be non-negative integers.
 
 For defective text, include all independently supported labels. Do not include a Good object together with defect objects. Emit each label at most once.
 
@@ -413,6 +467,8 @@ Never invent a label or pair a name with the wrong type.
 The `reason` must cite a short concrete example or measurable pattern from the input. Do not use vague statements such as "low quality" or "unreadable" without evidence.
 
 # Examples
+
+The example outputs below show only the contents of the `findings` array for readability. The actual response must always use the complete JSON object required by `# Output Format`, including `statistics`.
 
 **Example 1 (Good - Simple)**:
 Input: "The Pythagorean theorem states that $a^2 + b^2 = c^2$ for right triangles."
@@ -585,6 +641,11 @@ Input: "Thequickbrownfox. Thequickbrownfox. Thequickbrownfox. Thequickbrownfox. 
 Output: [{"score": 0, "type": "Effectiveness", "name": "Words_Stuck", "reason": "Word boundaries are missing in every repeated sentence"}, {"score": 0, "type": "Similarity", "name": "Duplication", "reason": "The same sentence repeats 6 times"}]
 
 ---
+
+Mandatory final response shape reminder:
+{"statistics": {"formula_count": 0, "table_count": 0, "code_count": 0, "error_formula_count": 0, "error_table_count": 0, "error_code_count": 0, "Formula_Missing": 0, "Formula_Partial_Loss": 0, "Formula_Token_Corruption": 0, "Formula_Unparseable": 0, "Formula_Structure_Corruption": 0, "Formula_Layout_Corruption": 0, "Formula_Extra_Content": 0, "Table_Missing": 0, "Table_Unparseable": 0, "Table_Partial_Loss": 0, "Table_Cell_Corruption": 0, "Table_Header_Corruption": 0, "Table_Structure_Corruption": 0, "Table_Layout_Corruption": 0, "Table_Extra_Content": 0, "Code_Missing": 0, "Code_Unparseable": 0, "Code_Partial_Loss": 0, "Code_Token_Corruption": 0, "Code_Layout_Corruption": 0, "Code_Extra_Content": 0}, "findings": [{"score": 0/1, "type": "", "name": "", "reason": ""}]}
+
+Return the JSON object only, with counts computed from the following input.
 
 # Input content to evaluate:
 
