@@ -10,7 +10,7 @@ This document provides comprehensive information about all quality metrics used 
 |--------|-------------|--------|-------------------------|
 | `LLMCodeQualityV1` | Four issue dimensions: effectiveness (including LLM low code content classification), completeness, repetition and security; automatic rule review, restricted code checks and all-label Executor output. | Internal implementation, adapted from LLMTextQualityV6 | [Rubric](code_quality_v1.md) / [Executor](../examples/code_quality/evaluate_code_executor.py) |
 | `LLMCodeClassificationV1` | Precision-first 0–5 relevance scoring and independent code presence. | Calibrated classification Prompt v5 (adapted) | [Rubric](code_quality_v1.md) / [Executor](../examples/code_quality/evaluate_code_executor.py) |
-| `LLMCodeQualityPipeline` | Full code QC: quality review, DeepSeek V4 Flash + GLM 5.2 classification (any score ≤2 is low content), and LLM safety review; deduplicated native Executor output. | Internal implementation | [Rubric](code_quality_v1.md) / [Executor](../examples/code_quality/evaluate_code_executor.py) |
+| `LLMCodeQualityPipeline` | Full code QC: quality/safety review with `bailian/deepseek-v4.1-flash`; classification with `glm-5.3-flash` + `bailian/deepseek-v4.1-flash`. Low code content requires both classifiers to succeed and their unrounded mean score to be ≤2; a classifier failure leaves the classification conclusion unknown and is recorded as an execution error. Deduplicated native Executor output. | Internal implementation | [Rubric](code_quality_v1.md) / [Executor](../examples/code_quality/evaluate_code_executor.py) |
 
 ### RAG Evaluation Metrics
 
