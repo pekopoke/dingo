@@ -66,7 +66,7 @@ def test_default_flash_models_and_request_bodies(monkeypatch, explicit_override)
 
 
 @pytest.mark.parametrize('overrides', [None, [], {'unknown': {}}, {'glm': {'model': 'other'}},
-                                        {'glm': {'extra_body': False}}])
+                                     {'glm': {'extra_body': False}}])
 def test_invalid_classification_request_overrides_fail_before_requests(overrides, monkeypatch):
     from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
 
