@@ -8,7 +8,7 @@
 |---|---|---|
 | `LLMCodeQualityV1` | 一次 LLM 调用检查四个方向，并复核可选的规则候选 | 1 无候选；0 有候选 |
 | `LLMCodeClassificationV1` | 单独进行 v5 口径的代码相关性评分与代码存在性判断，便于双模型配置 | 0–5；≥4 为 positive |
-| `LLMCodeQualityPipeline` | 完整流程：十一规则与综合质检、双模型分类及 LLM 安全判断，合并后交给 Executor | 任一分类评分 ≤2 命中代码含量低；执行错误独立标记 |
+| `LLMCodeQualityPipeline` | 完整流程：十一规则与综合质检、双模型分类及 LLM 安全判断，合并后交给 Executor | 两模型评分成功且平均分 ≤2 命中代码含量低；执行错误独立标记 |
 
 | 方向 | 覆盖项 | 误判边界 |
 |---|---|---|
@@ -104,13 +104,13 @@
 python examples/code_quality/evaluate_code_executor.py --input samples.jsonl --output outputs/code_qc --workers 4 --max-tokens 16384 --reasoning-effort low
 ```
 
-`--input` 模式检查输入文件中的全部记录，只保存 Executor 原生结果（一级标签目录、二级标签 JSONL 和统计），不生成抽样文件或人工审核表，也不执行脚本层面的补跑。Session ID 自动生成，无需手动设置 `LOCAL_DEPLOYMENT_MODE`。默认综合质检模型为 `deepseek-v4-flash`，可通过 `OPENAI_MODEL` 更换。
+`--input` 模式检查输入文件中的全部记录，只保存 Executor 原生结果（一级标签目录、二级标签 JSONL 和统计），不生成抽样文件或人工审核表，也不执行脚本层面的补跑。Session ID 自动生成，无需手动设置 `LOCAL_DEPLOYMENT_MODE`。默认综合质检模型为 `bailian/deepseek-v4.1-flash`，可通过 `OPENAI_MODEL` 更换。
 
 正式批量运行只维护 `evaluate_code_executor.py` 一个入口，见下方命令。任意已有数据集也可通过标准 `dingo eval --input config.json` 调用 `LLMCodeQualityPipeline`；不必使用按两类语料抽样的示例脚本。
 
-默认分类模型为 `deepseek-v4-flash` 和 `glm-5.2`，可以通过 `--classification-models` 更换。任一成功评分 ≤2 时 `low_code_content=true`；两者成功且均 >2 时为 false。若一个失败且另一个 >2，低分结论为 null；一个失败但另一个 ≤2 时保留低分候选，同时记录执行错误。
+默认分类模型为 `glm-5.3-flash` 和 `bailian/deepseek-v4.1-flash`，可以通过 `--classification-models` 更换。两模型均评分成功后，以未四舍五入的平均分判断：平均分 ≤2 时 `low_code_content=true`，否则为 false。任一评分失败时，`average_score` 和 `low_code_content` 均为 null，不根据单个分数生成低代码含量标签，同时记录执行错误。平均分保存在 `details.classification_consensus.average_score`；原始模型评分仍保留。例如 2+5 不命中、1+3 命中、0+5 不命中。此变更更新 Pipeline 的 rubric_version，旧结果不自动重算。
 
-完整流程由两个独立分类器决定最终 `Low_Code_Content`，综合质检内部评分保留供追溯，不作为第三个投票。≥4 的 positive 筛选标准单独保留，3 分不会触发低代码含量标签；分歧的复核要求保存在 `details.review_required`。
+完整流程由两个独立分类器决定最终 `Low_Code_Content`，综合质检内部评分保留供追溯，不作为第三个投票。两模型均 ≥4 的 positive 筛选标准单独保留；单个 3 分不能独立决定是否命中，例如 3+1 命中、3+3 不命中。分歧的复核要求保存在 `details.review_required`。
 
 ## 5. 验证范围
 
@@ -145,7 +145,7 @@ content/
 两类本地语料的抽样执行入口：
 
 ```powershell
-python -m examples.code_quality.evaluate_code_executor --nemotron <Nemotron.jsonl> --zh <中文网页.jsonl> --en <英文网页.jsonl> --output outputs/code_executor_run --count 100 --seed 20260911 --workers 6 --max-tokens 16384 --classification-models deepseek-v4-flash glm-5.2
+python -m examples.code_quality.evaluate_code_executor --nemotron <Nemotron.jsonl> --zh <中文网页.jsonl> --en <英文网页.jsonl> --output outputs/code_executor_run --count 100 --seed 20260911 --workers 6 --max-tokens 16384 --classification-models glm-5.3-flash bailian/deepseek-v4.1-flash
 ```
 
 读取 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。默认 Nemotron 抽 100 条，网页按中文/英文各 50 条抽样；原始字段保留，新增 `_code_qc` 来源与内容哈希。输出包含 manifest、Prompt 快照、抽样文件和两个数据类别目录。每轮 API 调用附带构造的 session ID。
@@ -173,8 +173,17 @@ LLM 按值的实际用途判断，不以字段名、随机字符串、prd 字样
 以下为标准 CLI 的 evaluator 配置片段；key/api_url 使用调用环境注入，切勿提交真实凭据：
 
 ```json
-{"name":"LLMCodeQualityPipeline","config":{"model":"deepseek-v4-flash","classification_models":["deepseek-v4-flash","glm-5.2"],"max_tokens":16384}}
+{"name":"LLMCodeQualityPipeline","config":{"model":"bailian/deepseek-v4.1-flash","classification_models":["glm-5.3-flash","bailian/deepseek-v4.1-flash"],"max_tokens":16384}}
 ```
+
+Pipeline 默认对 `bailian/deepseek-v4.1-flash` 使用 `extra_body.enable_thinking=false`（显式公共 extra_body 可覆盖），对分类阶段的 `glm-5.3-flash` 单独使用 `extra_body.reasoning_effort=low`，不继承公共关闭 thinking 参数。GLM 不支持关闭 thinking；显式的分类模型覆盖配置优先于此默认值。其他模型不自动套用这些参数。
+
+分类模型需要不同请求参数时，可配置 `classification_request_overrides`，键必须是
+`classification_models` 中的模型名，目前仅支持覆盖 `extra_body`。覆盖会整体替换该模型
+继承的 `extra_body`，不影响综合质检或另一个分类模型。例如公共配置为
+`"extra_body": {"enable_thinking": false}` 时，可单独配置
+`"classification_request_overrides": {"glm-5.3-flash": {"extra_body": {"reasoning_effort": "low"}}}`。
+这些参数需由所选服务实际支持；此示例不代表所有模型服务均支持相同参数。
 
 ### HTML 标记残留与乱码符号
 

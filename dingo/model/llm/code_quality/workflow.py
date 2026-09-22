@@ -4,7 +4,8 @@ from dingo.config.input_args import EvaluatorLLMArgs
 from dingo.io.output.eval_detail import EvalDetail
 from dingo.model.llm.code_quality.schema import RULE_NAMES
 
-DEFAULT_CLASSIFICATION_MODELS = ('deepseek-v4-flash', 'glm-5.2')
+DEFAULT_QUALITY_MODEL = 'bailian/deepseek-v4.1-flash'
+DEFAULT_CLASSIFICATION_MODELS = ('glm-5.3-flash', DEFAULT_QUALITY_MODEL)
 
 
 def configured_evaluator(evaluator, config):
@@ -41,19 +42,20 @@ def rule_candidates(results):
 
 
 def classification_consensus(results):
-    """Any successful score <=2 proves low content; failed calls remain unknown."""
+    """Both classifiers must succeed; their unrounded mean <=2 indicates low content."""
     scores = [item.score if item.applicable else None for item in results]
     if any(score is not None and (isinstance(score, bool) or score not in range(6)) for score in scores):
         raise ValueError('Classification scores must be integers from 0 to 5')
     complete = len(scores) == 2 and all(score is not None for score in scores)
-    low = any(score is not None and score <= 2 for score in scores)
     if not complete:
-        return {'positive': None, 'low_code_content': True if low else None, 'scores': scores,
+        return {'positive': None, 'low_code_content': None, 'scores': scores, 'average_score': None,
                 'review_required': True, 'execution_error': True, 'threshold_disagreement': None}
+    average = sum(scores) / 2
+    low = average <= 2
     positive = all(score >= 4 for score in scores)
     return {
-        'positive': positive, 'low_code_content': low, 'scores': scores,
+        'positive': positive, 'low_code_content': low, 'scores': scores, 'average_score': average,
         'threshold_disagreement': (scores[0] >= 4) != (scores[1] >= 4),
-        'review_priority': 'high' if min(scores) <= 2 else 'normal',
+        'review_priority': 'high' if low else 'normal',
         'review_required': not positive, 'execution_error': False,
     }

@@ -38,7 +38,7 @@ def test_direct_input_runs_pipeline_without_review_exports(tmp_path, monkeypatch
     assert config.input_path == str(source.resolve())
     evaluator = config.evaluator[0].evals[0]
     assert evaluator.name == 'LLMCodeQualityPipeline'
-    assert evaluator.config.classification_models == ['deepseek-v4-flash', 'glm-5.2']
+    assert evaluator.config.classification_models == ['glm-5.3-flash', 'bailian/deepseek-v4.1-flash']
     assert evaluator.config.extra_headers['X-Session-ID'].startswith('dingo-code-')
     assert json.loads(capsys.readouterr().out)['total'] == 1
     assert not output.exists()

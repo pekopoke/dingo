@@ -19,20 +19,85 @@ def classified(score):
     return LLMCodeClassificationV1.process_response(json.dumps({'score': score, 'contains_code': True, 'reason': 'fixture'}))
 
 
-@pytest.mark.parametrize('scores,low,complete', [([2, 5], True, True), ([5, 2], True, True),
-                                             ([3, 5], False, True), ([4, 4], False, True),
-                                             ([0, 1], True, True), ([2, None], True, False),
-                                             ([5, None], None, False), ([None, None], None, False)])
+def test_classification_request_overrides_do_not_leak_to_other_stages(monkeypatch):
+    from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
+
+    captured = []
+
+    def configure(evaluator, config):
+        captured.append(config)
+        result = classified(4) if evaluator is LLMCodeClassificationV1 else CodeQualityDetail(metric='quality')
+        return SimpleNamespace(client=None, eval=lambda data: result)
+
+    monkeypatch.setattr(pipeline, 'configured_evaluator', configure)
+    config = {'model': 'deepseek', 'classification_models': ['glm', 'deepseek'],
+              'extra_body': {'enable_thinking': False},
+              'classification_request_overrides': {'glm': {'extra_body': {'reasoning_effort': 'low'}}}}
+    judge = configured_evaluator(LLMCodeQualityPipeline, config)
+    assert judge.eval(Data(content='print(1)')).applicable
+    assert [c['extra_body'] for c in captured] == [
+        {'enable_thinking': False}, {'reasoning_effort': 'low'}, {'enable_thinking': False}]
+    assert all('classification_request_overrides' not in c for c in captured)
+    assert config['extra_body'] == {'enable_thinking': False}
+
+
+@pytest.mark.parametrize('explicit_override', [False, True])
+def test_default_flash_models_and_request_bodies(monkeypatch, explicit_override):
+    from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
+
+    captured = []
+
+    def configure(evaluator, config):
+        captured.append(config)
+        result = classified(4) if evaluator is LLMCodeClassificationV1 else CodeQualityDetail(metric='quality')
+        return SimpleNamespace(client=None, eval=lambda data: result)
+
+    monkeypatch.setattr(pipeline, 'configured_evaluator', configure)
+    config = {'extra_body': {'enable_thinking': False}}
+    if explicit_override:
+        config['classification_request_overrides'] = {
+            'glm-5.3-flash': {'extra_body': {'reasoning_effort': 'high'}}}
+    assert configured_evaluator(LLMCodeQualityPipeline, config).eval(Data(content='print(1)')).applicable
+    assert [c['model'] for c in captured] == [
+        'bailian/deepseek-v4.1-flash', 'glm-5.3-flash', 'bailian/deepseek-v4.1-flash']
+    assert [c['extra_body'] for c in captured] == [
+        {'enable_thinking': False}, {'reasoning_effort': 'high' if explicit_override else 'low'},
+        {'enable_thinking': False}]
+
+
+@pytest.mark.parametrize('overrides', [None, [], {'unknown': {}}, {'glm': {'model': 'other'}},
+                                        {'glm': {'extra_body': False}}])
+def test_invalid_classification_request_overrides_fail_before_requests(overrides, monkeypatch):
+    from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
+
+    def unexpected(*args, **kwargs):
+        pytest.fail('Invalid config must not start requests')
+
+    monkeypatch.setattr(pipeline, 'configured_evaluator', unexpected)
+    judge = configured_evaluator(LLMCodeQualityPipeline, {
+        'model': 'deepseek', 'classification_models': ['glm', 'deepseek'],
+        'classification_request_overrides': overrides})
+    assert not judge.eval(Data(content='print(1)')).applicable
+
+
+@pytest.mark.parametrize('scores,low,complete',
+                         [([a, b], a + b <= 4, True) for a in range(6) for b in range(6)]
+                         + [([a, None], None, False) for a in range(6)]
+                         + [([None, b], None, False) for b in range(6)]
+                         + [([None, None], None, False)])
 def test_dual_low_threshold_and_partial_failures(scores, low, complete):
     results = [classified(score) for score in scores]
     consensus = classification_consensus(results)
     assert consensus['low_code_content'] is low
     assert consensus['execution_error'] is not complete
+    assert consensus['average_score'] == (sum(scores) / 2 if complete else None)
     quality = CodeQualityDetail(metric='quality', details={'findings': []})
     merged = merge_results(quality, results, DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v1')
     assert ('Effectiveness.Low_Code_Content' in merged.label) == (low is True)
     assert merged.applicable is complete
     assert not (not complete and 'QUALITY_GOOD' in merged.label)
+    if low:
+        assert f'average={sum(scores) / 2} <=2' in merged.reason[0]
 
 
 def test_dual_scores_own_label_and_preserve_quality_decision():
@@ -57,7 +122,7 @@ def test_pipeline_preserves_consensus_review_requirement():
 def test_base_llm_failure_without_details_preserves_other_stage_findings():
     quality = EvalDetail(metric='LLMCodeQualityV1', applicable=False,
                          not_applicable_kind='execution_error', label=['REVIEW_EXECUTION_ERROR.ConvertJsonError'])
-    result = merge_results(quality, [classified(2), classified(5)], DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v2')
+    result = merge_results(quality, [classified(1), classified(3)], DEFAULT_CLASSIFICATION_MODELS, 'pipeline', 'v3')
     assert not result.applicable
     assert result.score is None
     assert result.label == ['Effectiveness.Low_Code_Content', 'REVIEW_EXECUTION_ERROR.quality']
@@ -101,7 +166,7 @@ def test_executor_full_pipeline_calls_stages_and_writes_results(tmp_path, monkey
 
     def classification(cls, data):
         calls.append(('classification', cls.dynamic_config.model))
-        return classified(2 if cls.dynamic_config.model == DEFAULT_CLASSIFICATION_MODELS[0] else 5)
+        return classified(1 if cls.dynamic_config.model == DEFAULT_CLASSIFICATION_MODELS[0] else 3)
 
     monkeypatch.setattr(LLMCodeQualityV1, 'eval', classmethod(quality))
     monkeypatch.setattr(LLMCodeClassificationV1, 'eval', classmethod(classification))

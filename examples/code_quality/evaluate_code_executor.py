@@ -24,7 +24,7 @@ from dingo.io.output.result_info import ResultInfo
 from dingo.model.llm.code_quality.base_code_quality import CodeQualityDetail
 from dingo.model.llm.code_quality.llm_code_quality_pipeline import LLMCodeQualityPipeline
 from dingo.model.llm.code_quality.schema import LABELS
-from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS
+from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS, DEFAULT_QUALITY_MODEL
 
 
 def atomic_write(path, text):
@@ -224,7 +224,7 @@ def main():
             parser.error('--input must point to an existing JSONL file')
     elif not all((args.nemotron, args.zh, args.en)) or args.count <= 0 or args.count % 2:
         parser.error('Supply --input, or --nemotron/--zh/--en with a positive even --count')
-    model = os.environ.get('OPENAI_MODEL', 'deepseek-v4-flash')
+    model = os.environ.get('OPENAI_MODEL', DEFAULT_QUALITY_MODEL)
     if not os.environ.get('OPENAI_API_KEY') or not os.environ.get('OPENAI_BASE_URL'):
         parser.error('Set OPENAI_API_KEY and OPENAI_BASE_URL')
     # Thread-only mode is supported by LocalExecutor and avoids unrelated Windows process imports.

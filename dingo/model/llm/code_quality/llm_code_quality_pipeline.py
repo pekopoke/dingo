@@ -7,7 +7,9 @@ from dingo.io.input import Data
 from dingo.model import Model
 from dingo.model.llm.code_quality.base_code_quality import BaseCodeEvaluation, CodeQualityDetail, execution_error
 from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeClassificationV1, LLMCodeQualityV1
-from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS, classification_consensus, configured_evaluator
+from dingo.model.llm.code_quality.workflow import (
+    DEFAULT_CLASSIFICATION_MODELS, DEFAULT_QUALITY_MODEL, classification_consensus, configured_evaluator,
+)
 
 
 def merge_results(quality, classified, models, metric, rubric):
@@ -19,7 +21,7 @@ def merge_results(quality, classified, models, metric, rubric):
     if consensus['low_code_content']:
         scores = ', '.join(f'{model}={score}' for model, score in zip(models, consensus['scores']))
         findings.append({'type': 'Effectiveness', 'name': 'Low_Code_Content',
-                         'reason': f'Dual classification: {scores}; at least one score is <=2.',
+                         'reason': f'Dual classification: {scores}; average={consensus["average_score"]} <=2.',
                          'line_start': None, 'line_end': None})
     stages = [('quality', quality), *[(f'classification_{index}', item) for index, item in enumerate(classified)]]
     errors = [name for name, item in stages if not item.applicable]
@@ -51,7 +53,7 @@ def merge_results(quality, classified, models, metric, rubric):
 class LLMCodeQualityPipeline(BaseCodeEvaluation):
     """Three LLM requests per record; one native Executor result."""
 
-    prompt = 'Code pipeline v2: dual minimum <=2; LLM-only safety.\n' + LLMCodeQualityV1.prompt + LLMCodeClassificationV1.prompt
+    prompt = 'Code pipeline v3: both classifiers succeed and mean <=2; LLM-only safety.\n' + LLMCodeQualityV1.prompt + LLMCodeClassificationV1.prompt
     _metric_info = {
         'category': 'Pretrain Text Quality Assessment Metrics', 'metric_name': 'LLMCodeQualityPipeline',
         'description': 'Code quality, DeepSeek/GLM dual classification and LLM safety review.',
@@ -63,15 +65,31 @@ class LLMCodeQualityPipeline(BaseCodeEvaluation):
         if not isinstance(getattr(input_data, 'content', None), str):
             return execution_error(cls.__name__, 'MissingOrNonStringContent')
         config = dict(cls.dynamic_config)
+        if not config.get('model'):
+            config['model'] = DEFAULT_QUALITY_MODEL
         models = config.pop('classification_models', list(DEFAULT_CLASSIFICATION_MODELS))
+        request_overrides = config.pop('classification_request_overrides', {})
         if (not isinstance(models, (list, tuple)) or len(models) != 2
                 or any(not isinstance(model, str) or not model.strip() for model in models) or models[0] == models[1]):
             return execution_error(cls.__name__, 'InvalidClassificationModels')
+        if (not isinstance(request_overrides, dict)
+                or any(model not in models or not isinstance(params, dict)
+                       or set(params) - {'extra_body'}
+                       or ('extra_body' in params and not isinstance(params['extra_body'], dict))
+                       for model, params in request_overrides.items())):
+            return execution_error(cls.__name__, 'InvalidClassificationRequestOverrides')
         headers = dict(config.get('extra_headers') or {})
         session = headers.get('X-Session-ID') or 'dingo-code-' + uuid.uuid4().hex
 
         def run(evaluator, model, stage):
-            judge = configured_evaluator(evaluator, {**config, 'model': model,
+            # Replace extra_body as a whole so incompatible inherited options can be removed.
+            overrides = request_overrides.get(model, {}) if stage.startswith('classification-') else {}
+            stage_config = dict(config)
+            if model == DEFAULT_QUALITY_MODEL:
+                stage_config.setdefault('extra_body', {'enable_thinking': False})
+            if model == 'glm-5.3-flash' and stage.startswith('classification-'):
+                stage_config['extra_body'] = {'reasoning_effort': 'low'}
+            judge = configured_evaluator(evaluator, {**stage_config, **overrides, 'model': model,
                                          'extra_headers': {**headers, 'X-Session-ID': session + '-' + stage}})
             try:
                 return judge.eval(input_data.model_copy(deep=True))
