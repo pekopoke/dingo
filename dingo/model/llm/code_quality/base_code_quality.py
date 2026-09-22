@@ -45,6 +45,33 @@ class CodeQualityDetail(EvalDetail):
 
 class BaseCodeEvaluation(BaseOpenAI):
     _required_fields = [RequiredField.CONTENT]
+    _instance_config_defaults = BaseOpenAI.dynamic_config.model_copy(deep=True)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Capture declared defaults before the legacy Executor writes class config.
+        cls._instance_config_defaults = cls.__dict__.get(
+            'dynamic_config', cls._instance_config_defaults).model_copy(deep=True)
+
+    def __init__(self):
+        # Executor configures the instance before invoking eval. Never inherit
+        # config left on the registered class by another task or evaluator group.
+        self.dynamic_config = self._instance_config_defaults.model_copy(deep=True)
+        self.eval = self._eval_instance
+
+    def _eval_instance(self, input_data: Data):
+        from dingo.model.llm.code_quality.workflow import configured_evaluator
+
+        runtime = configured_evaluator(type(self), self.dynamic_config)
+        try:
+            return runtime.eval(input_data)
+        finally:
+            clients = [getattr(runtime, name, None) for name in ('client', 'embedding_client')]
+            closed = set()
+            for client in clients:
+                if id(client) not in closed and callable(getattr(client, 'close', None)):
+                    closed.add(id(client))
+                    client.close()
 
     @classmethod
     def build_messages(cls, input_data: Data):

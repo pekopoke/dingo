@@ -19,6 +19,66 @@ def classified(score):
     return LLMCodeClassificationV1.process_response(json.dumps({'score': score, 'contains_code': True, 'reason': 'fixture'}))
 
 
+@pytest.mark.parametrize('evaluator', [LLMCodeQualityPipeline, LLMCodeQualityV1, LLMCodeClassificationV1])
+def test_code_executor_isolates_eight_concurrent_configs(evaluator, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    barrier = Barrier(8)
+    clients = []
+    monkeypatch.setattr(evaluator, 'dynamic_config', evaluator.dynamic_config.model_copy(deep=True))
+
+    def evaluate(cls, data):
+        client = SimpleNamespace(closed=False)
+        client.close = lambda: setattr(client, 'closed', True)
+        cls.client = client
+        clients.append(client)
+        if data.content == 'concurrent':
+            barrier.wait(timeout=15)
+        return CodeQualityDetail(metric=cls.__name__, label=['QUALITY_GOOD'], reason=[{
+            'model': cls.dynamic_config.model,
+            'temperature': getattr(cls.dynamic_config, 'temperature', None),
+            'extra_headers': getattr(cls.dynamic_config, 'extra_headers', None)}])
+
+    monkeypatch.setattr(evaluator, 'eval', classmethod(evaluate))
+    executor = LocalExecutor(InputArgs(executor={'result_save': {'all_labels': True}}))
+
+    def run(index):
+        config = {'model': f'model-{index}'}
+        if index < 8:
+            config.update(temperature=index / 10, extra_headers={'X-Session-ID': f'session-{index}'})
+        entries = InputArgs(evaluator=[{'evals': [{'name': evaluator.__name__, 'config': config}]}]).evaluator[0].evals
+        result = executor.evaluate_single_data(str(index), {}, 'llm',
+                                              {'content': 'concurrent' if index < 8 else 'sequential'}, entries)
+        return result.eval_details['default'][0].reason[0]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(run, range(8)))
+    assert results == [{'model': f'model-{i}', 'temperature': i / 10,
+                        'extra_headers': {'X-Session-ID': f'session-{i}'}} for i in range(8)]
+    last = run(8)
+    assert last == {'model': 'model-8', 'temperature': None,
+                    'extra_headers': None}
+    assert len(clients) == 9 and all(client.closed for client in clients)
+
+
+def test_configured_code_instance_preserves_explicit_config_and_closes_on_error(monkeypatch):
+    client = SimpleNamespace(closed=False)
+    client.close = lambda: setattr(client, 'closed', True)
+
+    def fail(cls, data):
+        assert cls.dynamic_config.model == 'configured-model'
+        cls.client = client
+        cls.embedding_client = client
+        raise RuntimeError('fixture')
+
+    monkeypatch.setattr(LLMCodeQualityV1, 'eval', classmethod(fail))
+    judge = configured_evaluator(LLMCodeQualityV1, {'model': 'configured-model'})()
+    with pytest.raises(RuntimeError, match='fixture'):
+        judge.eval(Data(content='print(1)'))
+    assert client.closed
+
+
 def test_classification_request_overrides_do_not_leak_to_other_stages(monkeypatch):
     from dingo.model.llm.code_quality import llm_code_quality_pipeline as pipeline
 
