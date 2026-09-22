@@ -190,9 +190,14 @@ def test_base_llm_failure_without_details_preserves_other_stage_findings():
 
 
 def test_good_pipeline_result_is_exported_without_losing_source_fields(tmp_path):
+    import importlib.util
     from pathlib import Path
 
-    from examples.code_quality.evaluate_code_executor import export_final
+    spec = importlib.util.spec_from_file_location(
+        'code_executor_example', Path(__file__).resolve().parents[4] / 'examples/code_quality/evaluate_code_executor.py')
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    export_final = runner.export_final
 
     result = merge_results(CodeQualityDetail(metric='quality'), [classified(4), classified(5)],
                            DEFAULT_CLASSIFICATION_MODELS, 'LLMCodeQualityPipeline', 'v1')

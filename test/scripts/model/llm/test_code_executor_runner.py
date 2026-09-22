@@ -1,16 +1,21 @@
 import copy
+import importlib.util
 import json
 from pathlib import Path
 
 from dingo.config import InputArgs
-from examples.code_quality.evaluate_code_executor import export_final, latest_records, sample_file
+
+# Examples are standalone scripts, not an installed Python package.
+_spec = importlib.util.spec_from_file_location(
+    'code_executor_example', Path(__file__).resolve().parents[4] / 'examples/code_quality/evaluate_code_executor.py')
+runner = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(runner)
+export_final, latest_records, sample_file = runner.export_final, runner.latest_records, runner.sample_file
 
 
 def test_direct_input_runs_pipeline_without_review_exports(tmp_path, monkeypatch, capsys):
     import sys
     from types import SimpleNamespace
-
-    from examples.code_quality import evaluate_code_executor as runner
 
     source = tmp_path / 'input.jsonl'
     source.write_text('{"content": "print(1)"}\n', encoding='utf-8')
@@ -101,7 +106,7 @@ def test_final_writer_separates_errors_from_good_records(tmp_path):
 def test_resume_ignores_only_an_interrupted_final_line(tmp_path):
     import pytest
 
-    from examples.code_quality.evaluate_code_executor import read_rows
+    read_rows = runner.read_rows
 
     path = tmp_path / 'checkpoint.jsonl'
     path.write_bytes(b'{"valid": 1}\n{"unfinished": "\xe4\xb8')
@@ -117,7 +122,7 @@ def test_resume_ignores_only_an_interrupted_final_line(tmp_path):
 def test_resume_rejects_stale_input_with_same_sample_id(tmp_path):
     import pytest
 
-    from examples.code_quality.evaluate_code_executor import save_rows
+    save_rows = runner.save_rows
 
     saved = record('one', True, 'Effectiveness.Syntax_Error')
     path = tmp_path / 'attempts' / '01' / 'content' / 'issue.jsonl'
@@ -131,7 +136,7 @@ def test_resume_rejects_stale_input_with_same_sample_id(tmp_path):
 def test_resume_rejects_stale_prompt(tmp_path):
     import pytest
 
-    from examples.code_quality.evaluate_code_executor import save_rows
+    save_rows = runner.save_rows
 
     saved = record('one', True, 'Effectiveness.Syntax_Error')
     saved['eval_details']['content'][0]['rubric_version'] = 'old-prompt'
@@ -160,8 +165,6 @@ def test_export_rejects_unsafe_checkpoint_label(tmp_path):
 def test_complete_resume_makes_no_model_calls(tmp_path, monkeypatch):
     import hashlib
     import sys
-
-    from examples.code_quality import evaluate_code_executor as runner
 
     rubric = runner.LLMCodeQualityPipeline.rubric_version()
     hashes = {}
