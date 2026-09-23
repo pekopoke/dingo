@@ -55,7 +55,7 @@
 
 只报有明确上下文证据的问题。有效短命令、合法空格和对齐、函数签名简写、教学错误和修复对照、调试提问、主动省略与正常预览不自动判错。缺少 Markdown 围栏本身不算问题。未定义符号、缺少依赖、算法逻辑、类型/API 契约及业务配置语义不纳入语法检查。
 
-代码空白与缩进异常统一使用 `Code_Whitespace`，同一证据不重复计入 `Syntax_Error`；代码截断须有实际断点和非预览证据。完整判定口径以 [Prompt](../dingo/model/llm/code_quality/prompts.py) 为准，结果记录 Prompt SHA-256。
+代码空白与缩进异常统一使用 `Code_Whitespace`，同一证据不重复计入 `Syntax_Error`；代码截断须有实际断点和非预览证据。完整判定口径以 [Prompt](../../dingo/model/llm/code_quality/prompts.py) 为准，结果记录 Prompt SHA-256。
 
 ## 3. 输出与分类
 
@@ -120,7 +120,7 @@ python -m pytest test/scripts/model/llm/test_code_quality_pipeline.py test/scrip
 
 测试覆盖解析、分类、混合标签、输入不变、配置隔离、规则复核完整性、错误状态及脱敏。模型调用使用模拟响应验证。
 
-[`code_quality_v1_regression.jsonl`](../test/data/code_quality_v1_regression.jsonl) 提供 63 个合成样例及预设期望：无围栏、短命令、纯公式、合法空格、多 include、标签冗余/错标、混合问题、Markdown 嵌套、教学/调试错误、截断、两类明显语法问题、跨块依赖、合法语言嵌入、范围外逻辑问题、IP、变量名误判等。这些不是模型实测成绩；需用目标模型试跑并人工复核后再计算准召率。仓库不包含历史生产语料或真实凭据。
+[`code_quality_v1_regression.jsonl`](../../test/data/code_quality_v1_regression.jsonl) 提供 63 个合成样例及预设期望：无围栏、短命令、纯公式、合法空格、多 include、标签冗余/错标、混合问题、Markdown 嵌套、教学/调试错误、截断、两类明显语法问题、跨块依赖、合法语言嵌入、范围外逻辑问题、IP、变量名误判等。这些不是模型实测成绩；需用目标模型试跑并人工复核后再计算准召率。仓库不包含历史生产语料或真实凭据。
 
 ### 使用 Dingo Executor 按一级/二级问题输出
 

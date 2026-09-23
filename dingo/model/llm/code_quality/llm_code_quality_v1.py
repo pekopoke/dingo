@@ -15,5 +15,5 @@ class LLMCodeQualityV1(BaseCodeQuality):
         'description': 'Effectiveness (including low code content), completeness, repetition and security with contextual rule review and restricted code checks.',
         'paper_title': 'Internal Implementation (adapted from LLMTextQualityV6)',
         'examples': 'examples/code_quality/evaluate_code_executor.py',
-        'evaluation_results': 'docs/code_quality_v1.md',
+        'evaluation_results': 'docs/code_quality/code_quality_v1.md',
     }
