@@ -2,7 +2,7 @@
 
 import json
 
-from dingo.model.llm.code_quality.schema import LABELS
+from dingo.model.llm.code_quality.base_code_quality import LABELS
 
 CLASSIFICATION_POLICY = r"""
 ## Code classification: precision-first, calibrated Prompt v5 policy

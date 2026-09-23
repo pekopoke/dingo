@@ -47,11 +47,11 @@
 
 ## 2. 架构和判定边界
 
-- `base_code_quality.py` 复用 BaseOpenAI，负责输入、严格解析、规则复核完整性和证据行号校验。
-- `prompts.py` 定义判定口径，`schema.py` 定义允许标签和一致性约束。
-- `llm_code_quality_v1.py` 注册综合质检与独立分类组件。
+- `base_code_quality.py` 集中管理输出 schema、十一规则初筛、配置隔离、响应解析、证据校验和双模型汇总。
+- `prompts.py` 集中定义分类与综合质检 Prompt；两个评估器文件各自只引用对应 Prompt。
+- `llm_code_classification_v1.py` 只注册独立 0–5 分代码含量分类组件。
+- `llm_code_quality_v1.py` 只注册综合质量与安全质检组件。
 - `llm_code_quality_pipeline.py` 组合综合质检、两个分类器，保留阶段结果并合并标签。
-- `workflow.py` 提供十一规则初筛、配置隔离和双模型汇总。
 
 只报有明确上下文证据的问题。有效短命令、合法空格和对齐、函数签名简写、教学错误和修复对照、调试提问、主动省略与正常预览不自动判错。缺少 Markdown 围栏本身不算问题。未定义符号、缺少依赖、算法逻辑、类型/API 契约及业务配置语义不纳入语法检查。
 

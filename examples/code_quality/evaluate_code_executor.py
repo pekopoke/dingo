@@ -21,10 +21,8 @@ from pathlib import Path
 from dingo.config import InputArgs
 from dingo.exec.local import LocalExecutor
 from dingo.io.output.result_info import ResultInfo
-from dingo.model.llm.code_quality.base_code_quality import CodeQualityDetail
+from dingo.model.llm.code_quality.base_code_quality import DEFAULT_CLASSIFICATION_MODELS, DEFAULT_QUALITY_MODEL, LABELS, CodeQualityDetail
 from dingo.model.llm.code_quality.llm_code_quality_pipeline import LLMCodeQualityPipeline
-from dingo.model.llm.code_quality.schema import LABELS
-from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS, DEFAULT_QUALITY_MODEL
 
 
 def atomic_write(path, text):

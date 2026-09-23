@@ -7,9 +7,9 @@ from dingo.config.input_args import EvaluatorLLMArgs
 from dingo.io.input import Data
 from dingo.io.output.eval_detail import EvalDetail
 from dingo.model import Model
-from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeClassificationV1, LLMCodeQualityV1
-from dingo.model.llm.code_quality.schema import CODE_COMPONENTS, MIXED, SYNTAX_SUBTYPES, Politics
-from dingo.model.llm.code_quality.workflow import classification_consensus, configured_evaluator, rule_candidates, run_code_rules
+from dingo.model.llm.code_quality.base_code_quality import CODE_COMPONENTS, MIXED, SYNTAX_SUBTYPES, Politics, classification_consensus, configured_evaluator, rule_candidates, run_code_rules
+from dingo.model.llm.code_quality.llm_code_classification_v1 import LLMCodeClassificationV1
+from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeQualityV1
 from dingo.utils.exception import ConvertJsonError
 
 
@@ -360,8 +360,8 @@ def test_executor_routes_all_code_findings_and_preserves_details(tmp_path, monke
 
 
 def test_auto_rule_failure_is_not_a_pass(monkeypatch):
-    from dingo.model.llm.code_quality import workflow
-    monkeypatch.setattr(workflow, 'run_code_rules', lambda data: [EvalDetail(
+    from dingo.model.llm.code_quality import base_code_quality
+    monkeypatch.setattr(base_code_quality, 'run_code_rules', lambda data: [EvalDetail(
         metric='RuleContentNull', applicable=False, not_applicable_kind='execution_error')])
     result = LLMCodeQualityV1.eval(Data(content='print(1)'))
     assert not result.applicable

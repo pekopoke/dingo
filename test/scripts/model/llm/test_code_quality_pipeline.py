@@ -7,10 +7,10 @@ from dingo.config import InputArgs
 from dingo.exec.local import LocalExecutor
 from dingo.io.input import Data
 from dingo.io.output.eval_detail import EvalDetail
-from dingo.model.llm.code_quality.base_code_quality import CodeQualityDetail
+from dingo.model.llm.code_quality.base_code_quality import DEFAULT_CLASSIFICATION_MODELS, CodeQualityDetail, classification_consensus, configured_evaluator
+from dingo.model.llm.code_quality.llm_code_classification_v1 import LLMCodeClassificationV1
 from dingo.model.llm.code_quality.llm_code_quality_pipeline import LLMCodeQualityPipeline, merge_results
-from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeClassificationV1, LLMCodeQualityV1
-from dingo.model.llm.code_quality.workflow import DEFAULT_CLASSIFICATION_MODELS, classification_consensus, configured_evaluator
+from dingo.model.llm.code_quality.llm_code_quality_v1 import LLMCodeQualityV1
 
 
 def classified(score):
