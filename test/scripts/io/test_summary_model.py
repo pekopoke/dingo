@@ -109,6 +109,7 @@ class TestSummaryModel:
                         "tool_config": {
                             "API_KEY": "secret-tool-key",
                         },
+                        "new_config_field": "not-approved-yet",
                     },
                 }],
             }],
@@ -124,7 +125,8 @@ class TestSummaryModel:
         assert serialized["dataset"]["sql_config"]["username"] == "test-user"
         assert "api_token" not in serialized["executor"]["retrieval"]
         assert "key" not in config
-        assert "API_KEY" not in config["tool_config"]
+        assert "tool_config" not in config
+        assert "new_config_field" not in config
         assert config["model"] == "test-model"
 
     def test_add_metric_score_single(self):
