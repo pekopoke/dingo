@@ -204,13 +204,20 @@ class InputArgs(BaseModel):
         else:
             data = self.dict()
 
-        excluded = {"key"}
+        excluded = {
+            "api_key",
+            "api_token",
+            "key",
+            "password",
+            "s3_ak",
+            "s3_sk",
+        }
         pending = [data]
         while pending:
             value = pending.pop()
             if isinstance(value, dict):
                 for key in list(value):
-                    if key in excluded:
+                    if isinstance(key, str) and key.lower() in excluded:
                         del value[key]
                     else:
                         pending.append(value[key])

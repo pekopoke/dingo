@@ -83,6 +83,22 @@ class TestSummaryModel:
 
     def test_input_args_to_dict_recursively_excludes_fields(self):
         input_args = InputArgs(**{
+            "dataset": {
+                "s3_config": {
+                    "s3_ak": "access-key",
+                    "s3_sk": "secret-key",
+                    "s3_bucket": "test-bucket",
+                },
+                "sql_config": {
+                    "username": "test-user",
+                    "password": "secret-password",
+                },
+            },
+            "executor": {
+                "retrieval": {
+                    "api_token": "secret-token",
+                },
+            },
             "evaluator": [{
                 "fields": {"content": "content"},
                 "evals": [{
@@ -90,6 +106,9 @@ class TestSummaryModel:
                     "config": {
                         "model": "test-model",
                         "key": "secret-key",
+                        "tool_config": {
+                            "API_KEY": "secret-tool-key",
+                        },
                     },
                 }],
             }],
@@ -98,7 +117,14 @@ class TestSummaryModel:
         serialized = input_args.to_dict()
         config = serialized["evaluator"][0]["evals"][0]["config"]
 
+        assert "s3_ak" not in serialized["dataset"]["s3_config"]
+        assert "s3_sk" not in serialized["dataset"]["s3_config"]
+        assert serialized["dataset"]["s3_config"]["s3_bucket"] == "test-bucket"
+        assert "password" not in serialized["dataset"]["sql_config"]
+        assert serialized["dataset"]["sql_config"]["username"] == "test-user"
+        assert "api_token" not in serialized["executor"]["retrieval"]
         assert "key" not in config
+        assert "API_KEY" not in config["tool_config"]
         assert config["model"] == "test-model"
 
     def test_add_metric_score_single(self):
