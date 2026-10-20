@@ -19,31 +19,48 @@ IPC_CODE_RE = re.compile(
 )
 ASCII_ALNUM_RE = re.compile(r"^[A-Za-z0-9]+$")
 JP_ERA_CITATION_RE = re.compile(
-    r"^JP(?P<publication>特開|特公|実開|実公)"
-    r"(?P<era>[平昭])"
-    r"(?P<era_year>\d+)-"
+    r"^JP(?P<publication>公表実用新案|実用新案公表|特開|特表|特公|実開|実表|実公)"
+    r"(?P<era>[平昭令])"
+    r"(?P<era_year>\d+)[\-－‐―]"
     r"(?P<serial>\d+)"
+    r"号?"
+    r"(?:\([^)]*\))?"
     r"(?P<kind_code>[A-Z]\d?)?$"
 )
 JP_GREGORIAN_CITATION_RE = re.compile(
-    r"^JP特開"
+    r"^JP(?P<publication>公表実用新案|実用新案公表|特開|特表|特公|実開|実表|実公)"
     r"(?P<year>\d{4})-"
     r"(?P<serial>\d+)"
     r"(?:\([^)]*\))?"
     r"(?P<kind_code>[A-Z]\d?)?$"
 )
 JP_REGISTRATION_CITATION_RE = re.compile(
-    r"^JP(?:特許第|実用新案登録第|第)"
+    r"^JP(?:特許第|実用新案登録第|登録実用新案第|第)"
     r"(?P<registration_number>\d+)号"
     r"(?:\([^)]*\))?"
     r"(?P<kind_code>[A-Z]\d?)$"
 )
-JP_ERA_CODES = {"平": "H", "昭": "S"}
+JPWO_TWO_DIGIT_YEAR_RE = re.compile(
+    r"^JPWO(?P<year>\d{2})/"
+    r"(?P<serial>\d{5,6})"
+    r"(?P<kind_code>[A-Z]\d?)$"
+)
+JP_ERA_SHORT_SERIAL_RE = re.compile(
+    r"^JP(?P<era>[HSR])"
+    r"(?P<era_year>\d{2})"
+    r"(?P<serial>\d{1,5})"
+    r"(?P<kind_code>[A-Z]\d?)$"
+)
+JP_ERA_CODES = {"平": "H", "昭": "S", "令": "R"}
 JP_PUBLICATION_DEFAULT_KIND_CODES = {
     "特開": "A",
+    "特表": "A",
     "特公": "B2",
     "実開": "U",
+    "実表": "U",
     "実公": "Y2",
+    "公表実用新案": "U",
+    "実用新案公表": "U",
 }
 ValidationResult = tuple[bool, List[str], List[str]]
 
@@ -118,6 +135,8 @@ def _expected_jp_document_number(document_number: str) -> str | None:
     """Return the expected normalized value for supported JP citation forms."""
     match = JP_ERA_CITATION_RE.fullmatch(document_number)
     if match is not None:
+        if len(match.group("era_year")) > 2 or len(match.group("serial")) > 6:
+            return None
         kind_code = match.group("kind_code") or JP_PUBLICATION_DEFAULT_KIND_CODES[
             match.group("publication")
         ]
@@ -131,7 +150,14 @@ def _expected_jp_document_number(document_number: str) -> str | None:
 
     match = JP_GREGORIAN_CITATION_RE.fullmatch(document_number)
     if match is not None:
-        kind_code = match.group("kind_code") or "A"
+        if len(match.group("serial")) > 6:
+            return None
+        # Parenthesized text is a duplicate display marker.  The normalized
+        # value deliberately uses only the year, serial and kind code outside
+        # the parentheses, even when the two representations disagree.
+        kind_code = match.group("kind_code") or JP_PUBLICATION_DEFAULT_KIND_CODES[
+            match.group("publication")
+        ]
         return (
             "JP"
             f"{match.group('year')}"
@@ -141,9 +167,38 @@ def _expected_jp_document_number(document_number: str) -> str | None:
 
     match = JP_REGISTRATION_CITATION_RE.fullmatch(document_number)
     if match is not None:
+        if len(match.group("registration_number")) != 7:
+            return None
         return (
             "JP"
             f"{match.group('registration_number')}"
+            f"{match.group('kind_code')}"
+        )
+
+    match = JPWO_TWO_DIGIT_YEAR_RE.fullmatch(document_number)
+    if match is not None:
+        short_year = int(match.group("year"))
+        if 0 <= short_year <= 26:
+            year = 2000 + short_year
+        elif 30 <= short_year <= 99:
+            year = 1900 + short_year
+        else:
+            # The agreed rule does not define a century for 27-29.
+            return None
+        return (
+            "JPWO"
+            f"{year}"
+            f"{match.group('serial').zfill(6)}"
+            f"{match.group('kind_code')}"
+        )
+
+    match = JP_ERA_SHORT_SERIAL_RE.fullmatch(document_number)
+    if match is not None:
+        return (
+            "JP"
+            f"{match.group('era')}"
+            f"{match.group('era_year')}"
+            f"{match.group('serial').zfill(6)}"
             f"{match.group('kind_code')}"
         )
 
@@ -176,12 +231,67 @@ def check_document_number_unifed(
     return bool(error_labels), error_labels, reasons
 
 
+def check_prior_art_references(prior_art_references: Any) -> ValidationResult:
+    if isinstance(prior_art_references, str):
+        try:
+            prior_art_references = json.loads(prior_art_references, strict=False)
+        except json.JSONDecodeError:
+            return True, ["invalid_json"], ["value must be a JSON array"]
+
+    if not isinstance(prior_art_references, list):
+        return True, ["wrong_type"], ["value must be a list"]
+
+    required_fields = {
+        "sequence",
+        "srep_phase",
+        "document_number",
+        "document_number_unifed",
+    }
+    error_labels: List[str] = []
+    reasons: List[str] = []
+
+    def add_error_label(error_label: str) -> None:
+        if error_label not in error_labels:
+            error_labels.append(error_label)
+
+    for index, reference in enumerate(prior_art_references):
+        if not isinstance(reference, dict):
+            add_error_label("wrong_type")
+            reasons.append(f"item[{index}] must be an object")
+            continue
+
+        missing_fields = sorted(required_fields - reference.keys())
+        if missing_fields:
+            add_error_label("missing_field")
+            reasons.extend(
+                f"item[{index}].{field}: missing field" for field in missing_fields
+            )
+            continue
+
+        invalid, nested_labels, nested_reasons = check_document_number_unifed(
+            reference["document_number_unifed"],
+            reference["document_number"],
+        )
+        if invalid:
+            for error_label in nested_labels:
+                add_error_label(error_label)
+            reasons.extend(
+                f"item[{index}].document_number_unifed: {reason}"
+                for reason in nested_reasons
+            )
+
+    return bool(error_labels), error_labels, reasons
+
+
 FIELD_VALIDATORS = {
     "claims": lambda record: check_claims(record.get("claims")),
     "ipc_unified": lambda record: check_ipc_unified(record.get("ipc_unified")),
     "document_number_unifed": lambda record: check_document_number_unifed(
         record.get("document_number_unifed"),
         record.get("document_number"),
+    ),
+    "prior_art_references": lambda record: check_prior_art_references(
+        record.get("prior_art_references")
     ),
 }
 
