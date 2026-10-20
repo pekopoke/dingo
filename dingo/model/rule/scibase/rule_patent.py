@@ -24,6 +24,7 @@ JP_ERA_CITATION_RE = re.compile(
     r"(?P<era_year>\d+)[\-－‐―]"
     r"(?P<serial>\d+)"
     r"号?"
+    r"(?:\([^)]*\))?"
     r"(?P<kind_code>[A-Z]\d?)?$"
 )
 JP_GREGORIAN_CITATION_RE = re.compile(
@@ -230,12 +231,67 @@ def check_document_number_unifed(
     return bool(error_labels), error_labels, reasons
 
 
+def check_prior_art_references(prior_art_references: Any) -> ValidationResult:
+    if isinstance(prior_art_references, str):
+        try:
+            prior_art_references = json.loads(prior_art_references, strict=False)
+        except json.JSONDecodeError:
+            return True, ["invalid_json"], ["value must be a JSON array"]
+
+    if not isinstance(prior_art_references, list):
+        return True, ["wrong_type"], ["value must be a list"]
+
+    required_fields = {
+        "sequence",
+        "srep_phase",
+        "document_number",
+        "document_number_unifed",
+    }
+    error_labels: List[str] = []
+    reasons: List[str] = []
+
+    def add_error_label(error_label: str) -> None:
+        if error_label not in error_labels:
+            error_labels.append(error_label)
+
+    for index, reference in enumerate(prior_art_references):
+        if not isinstance(reference, dict):
+            add_error_label("wrong_type")
+            reasons.append(f"item[{index}] must be an object")
+            continue
+
+        missing_fields = sorted(required_fields - reference.keys())
+        if missing_fields:
+            add_error_label("missing_field")
+            reasons.extend(
+                f"item[{index}].{field}: missing field" for field in missing_fields
+            )
+            continue
+
+        invalid, nested_labels, nested_reasons = check_document_number_unifed(
+            reference["document_number_unifed"],
+            reference["document_number"],
+        )
+        if invalid:
+            for error_label in nested_labels:
+                add_error_label(error_label)
+            reasons.extend(
+                f"item[{index}].document_number_unifed: {reason}"
+                for reason in nested_reasons
+            )
+
+    return bool(error_labels), error_labels, reasons
+
+
 FIELD_VALIDATORS = {
     "claims": lambda record: check_claims(record.get("claims")),
     "ipc_unified": lambda record: check_ipc_unified(record.get("ipc_unified")),
     "document_number_unifed": lambda record: check_document_number_unifed(
         record.get("document_number_unifed"),
         record.get("document_number"),
+    ),
+    "prior_art_references": lambda record: check_prior_art_references(
+        record.get("prior_art_references")
     ),
 }
 

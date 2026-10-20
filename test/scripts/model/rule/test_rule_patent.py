@@ -1,7 +1,15 @@
+import json
+
 import pytest
 
 from dingo.io.input import Data
-from dingo.model.rule.scibase.rule_patent import MAX_CLAIMS_LENGTH, RulePatentFieldValidation, check_document_number_unifed, check_ipc_unified
+from dingo.model.rule.scibase.rule_patent import (
+    MAX_CLAIMS_LENGTH,
+    RulePatentFieldValidation,
+    check_document_number_unifed,
+    check_ipc_unified,
+    check_prior_art_references,
+)
 
 
 def _claims_with_string_length(length: int) -> list[dict]:
@@ -20,6 +28,7 @@ class TestRulePatentFieldValidation:
                 ipc_unified=[],
                 document_number="JP2013022164A",
                 document_number_unifed="JP2013022164A",
+                prior_art_references=[],
             )
         )
 
@@ -36,6 +45,7 @@ class TestRulePatentFieldValidation:
                 ipc_unified=[],
                 document_number="JP2013022164A",
                 document_number_unifed="JP2013022164A",
+                prior_art_references=[],
             )
         )
 
@@ -51,6 +61,7 @@ class TestRulePatentFieldValidation:
                 ipc_unified=[],
                 document_number="JP2013022164A",
                 document_number_unifed="JP2013022164A",
+                prior_art_references=[],
             )
         )
 
@@ -142,6 +153,7 @@ class TestRulePatentFieldValidation:
                 ipc_unified=["A01A 01/00"],
                 document_number="JP2013022164A",
                 document_number_unifed="JP2013022164A",
+                prior_art_references=[],
             )
         )
 
@@ -253,6 +265,7 @@ class TestRulePatentFieldValidation:
                 ipc_unified=[],
                 document_number="JP特開平11-73838A",
                 document_number_unifed="JPH11073839A",
+                prior_art_references=[],
             )
         )
 
@@ -270,9 +283,114 @@ class TestRulePatentFieldValidation:
                 claims=[],
                 ipc_unified=[],
                 document_number="JP2013022164A",
+                prior_art_references=[],
             )
         )
 
         assert result.status is True
         assert result.label == ["document_number_unifed.missing_field"]
         assert result.reason == ["document_number_unifed: missing field"]
+
+    def test_valid_prior_art_references(self):
+        prior_art_references = [
+            {
+                "sequence": "1",
+                "srep_phase": "SEA",
+                "document_number": "JP特開2002-15639(JP,A)A",
+                "document_number_unifed": "JP2002015639A",
+            },
+            {
+                "sequence": "2",
+                "srep_phase": "SEA",
+                "document_number": "JP特開平7-302526(JP,A)A",
+                "document_number_unifed": "JPH07302526A",
+            },
+        ]
+
+        assert check_prior_art_references(prior_art_references) == (
+            False,
+            [],
+            [],
+        )
+
+        assert check_prior_art_references(
+            json.dumps(prior_art_references, ensure_ascii=False)
+        ) == (False, [], [])
+
+    def test_prior_art_references_reports_item_index(self):
+        invalid, labels, reasons = check_prior_art_references(
+            [
+                {
+                    "sequence": "1",
+                    "srep_phase": "SEA",
+                    "document_number": "JP特開2002-15639(JP,A)A",
+                    "document_number_unifed": "JP2002015639A",
+                },
+                {
+                    "sequence": "2",
+                    "srep_phase": "SEA",
+                    "document_number": "JP特開平7-302526(JP,A)A",
+                    "document_number_unifed": "JPH07302527A",
+                },
+            ]
+        )
+
+        assert invalid is True
+        assert labels == ["incorrect_conversion"]
+        assert reasons == [
+            "item[1].document_number_unifed: conversion from document_number "
+            "'JP特開平7-302526(JP,A)A' is incorrect: expected "
+            "'JPH07302526A', got 'JPH07302527A'"
+        ]
+
+    @pytest.mark.parametrize(
+        ("prior_art_references", "expected_label", "expected_reason"),
+        [
+            (None, "wrong_type", "value must be a list"),
+            ("not-json", "invalid_json", "value must be a JSON array"),
+            ('{"sequence": "1"}', "wrong_type", "value must be a list"),
+            (["not-an-object"], "wrong_type", "item[0] must be an object"),
+            (
+                [{"sequence": "1"}],
+                "missing_field",
+                "item[0].document_number: missing field",
+            ),
+        ],
+    )
+    def test_invalid_prior_art_references_structure(
+        self,
+        prior_art_references,
+        expected_label,
+        expected_reason,
+    ):
+        invalid, labels, reasons = check_prior_art_references(prior_art_references)
+
+        assert invalid is True
+        assert labels == [expected_label]
+        assert expected_reason in reasons
+
+    def test_rule_reports_invalid_prior_art_reference(self):
+        result = RulePatentFieldValidation().eval(
+            Data(
+                claims=[],
+                ipc_unified=[],
+                document_number="JP2013022164A",
+                document_number_unifed="JP2013022164A",
+                prior_art_references=[
+                    {
+                        "sequence": "1",
+                        "srep_phase": "SEA",
+                        "document_number": "JP特開平7-302526(JP,A)A",
+                        "document_number_unifed": "JPH07302527A",
+                    }
+                ],
+            )
+        )
+
+        assert result.status is True
+        assert result.label == ["prior_art_references.incorrect_conversion"]
+        assert result.reason == [
+            "prior_art_references: item[0].document_number_unifed: conversion "
+            "from document_number 'JP特開平7-302526(JP,A)A' is incorrect: "
+            "expected 'JPH07302526A', got 'JPH07302527A'"
+        ]
