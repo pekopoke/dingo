@@ -157,13 +157,26 @@ class TestRulePatentFieldValidation:
             ("JP特開昭63-123456A", "JPS63123456A"),
             ("JP特開昭63-123456", "JPS63123456A"),
             ("JP特開2003-75095(P2003-75095A)A", "JP2003075095A"),
+            # Parenthesized duplicate data is ignored when it conflicts with
+            # the year, serial or kind code outside the parentheses.
+            ("JP特開2003-75095(P2004-123456B2)A", "JP2003075095A"),
             ("JP特公平7-46852B2", "JPH07046852B2"),
             ("JP特公昭48-1234B2", "JPS48001234B2"),
+            ("JP特表平8-500910A", "JPH08500910A"),
+            ("JP特開令6-123A", "JPR06000123A"),
             ("JP特許第3405959号(P3405959)B2", "JP3405959B2"),
             ("JP実用新案登録第3082161号(U3082161)U", "JP3082161U"),
+            ("JP登録実用新案第3082161号(U3082161)U", "JP3082161U"),
             ("JP実開平6-10396U", "JPH06010396U"),
             ("JP実公平7-15070Y2", "JPH07015070Y2"),
             ("JP第2891579号B2", "JP2891579B2"),
+            ("JPWO96/34063A1", "JPWO1996034063A1"),
+            ("JPWO01/088243A1", "JPWO2001088243A1"),
+            ("JPWO26/12345A1", "JPWO2026012345A1"),
+            ("JPWO30/12345A1", "JPWO1930012345A1"),
+            ("JPH1083076A", "JPH10083076A"),
+            ("JPH0517383U", "JPH05017383U"),
+            ("JPS5918043B2", "JPS59018043B2"),
         ],
     )
     def test_valid_document_number_conversion(
@@ -220,6 +233,18 @@ class TestRulePatentFieldValidation:
             "conversion from document_number 'JP特開平11-73838A' is incorrect: "
             "expected 'JPH11073838A', got 'JPH11073839A'"
         ]
+
+    @pytest.mark.parametrize("year", ["27", "28", "29"])
+    def test_jpwo_undefined_two_digit_year_is_not_guessed(self, year):
+        original = f"JPWO{year}/12345A1"
+
+        # The document does not define a century for 27-29, so the checker
+        # validates the unified field's format without inventing a conversion.
+        assert check_document_number_unifed(original, original) == (
+            True,
+            ["invalid_format"],
+            ["value must contain only ASCII letters and digits"],
+        )
 
     def test_rule_reports_invalid_document_number_unifed(self):
         result = RulePatentFieldValidation().eval(
