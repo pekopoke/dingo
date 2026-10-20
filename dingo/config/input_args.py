@@ -197,24 +197,127 @@ class InputArgs(BaseModel):
     evaluator: List[EvalPipline] = []
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return a config snapshot, recursively excluding sensitive fields."""
+        """Return a config snapshot containing only explicitly approved fields."""
+        # Security allowlist: fields omitted here are excluded by default.
+        safe_serialization_fields: Dict[str, Any] = {
+            "task_id": ...,
+            "task_name": ...,
+            "input_path": ...,
+            "output_path": ...,
+            "log_level": ...,
+            "dataset": {
+                "source": ...,
+                "format": ...,
+                "hf_config": {
+                    "huggingface_split",
+                    "huggingface_config_name",
+                },
+                "s3_config": {
+                    "s3_endpoint_url",
+                    "s3_bucket",
+                    "s3_addressing_style",
+                },
+                "sql_config": {
+                    "dialect",
+                    "driver",
+                    "username",
+                    "host",
+                    "port",
+                    "database",
+                    "connect_args",
+                    "engine_args",
+                },
+                "excel_config": {"sheet_name", "has_header"},
+                "csv_config": {
+                    "has_header",
+                    "encoding",
+                    "dialect",
+                    "delimiter",
+                    "quotechar",
+                },
+                "parquet_config": {"batch_size", "columns"},
+                "mineru_config": {"include_types"},
+            },
+            "executor": {
+                "start_index": ...,
+                "end_index": ...,
+                "max_workers": ...,
+                "batch_size": ...,
+                "multi_turn_mode": ...,
+                "result_save": {
+                    "bad",
+                    "good",
+                    "all_labels",
+                    "raw",
+                    "merge",
+                    "limit",
+                    "field_list",
+                    "full_field_sample_count",
+                },
+                "retrieval": {
+                    "backend": ...,
+                    "api_url": ...,
+                    "limit": ...,
+                    "retrieval_mode": ...,
+                    "sub_queries": ...,
+                    "search_type": ...,
+                    "sort_by": ...,
+                    "freshness_boost": ...,
+                    "filters": ...,
+                    "max_queries": ...,
+                    "title_fuzzy_enabled": ...,
+                    "title_fuzzy_threshold": ...,
+                    "title_fuzzy_margin": ...,
+                    "title_fuzzy_min_len": ...,
+                    "title_fuzzy_max_candidates": ...,
+                    "timeout": ...,
+                    "rate_limit": ...,
+                    "max_retries": ...,
+                    "max_workers": ...,
+                    "open_eval": {
+                        "enabled",
+                        "model",
+                        "api_url",
+                        "top_k",
+                        "aggregate",
+                        "max_workers",
+                        "prompt_mode",
+                        "expected_criteria",
+                    },
+                    "input_queries": ...,
+                },
+            },
+            "evaluator": {
+                "__all__": {
+                    "fields": ...,
+                    "evals": {
+                        "__all__": {
+                            "name": ...,
+                            "config": {
+                                "threshold": ...,
+                                "pattern": ...,
+                                "key_list": ...,
+                                "refer_path": ...,
+                                "model": ...,
+                                "api_url": ...,
+                                "embedding_config": {"model", "api_url"},
+                                "custom_metric": {
+                                    "metric",
+                                    "description",
+                                    "criteria",
+                                    "input_fields",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
         model_dump = getattr(self, "model_dump", None)
         if callable(model_dump):
-            data = model_dump()
-        else:
-            data = self.dict()
-
-        excluded = {"key"}
-        pending = [data]
-        while pending:
-            value = pending.pop()
-            if isinstance(value, dict):
-                for key in list(value):
-                    if key in excluded:
-                        del value[key]
-                    else:
-                        pending.append(value[key])
-            elif isinstance(value, list):
-                pending.extend(value)
-
-        return data
+            return model_dump(
+                include=safe_serialization_fields,
+                serialize_as_any=True,
+            )
+        return self.dict(include=safe_serialization_fields)
