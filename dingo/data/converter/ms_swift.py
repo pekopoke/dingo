@@ -119,8 +119,18 @@ class MsSwiftConverter(BaseConverter):
                     raise ValueError(f"ms_swift messages[{index}] must be an object")
 
             converted = dict(record)
+            derived_fields = set()
             for prepare in preparers:
-                converted.update(prepare(record))
-            return Data(**converted)
+                extra_fields = prepare(record)
+                conflicts = extra_fields.keys() & converted.keys()
+                if conflicts:
+                    raise ValueError(
+                        f"ms_swift derived fields conflict with existing fields: {sorted(conflicts)}"
+                    )
+                converted.update(extra_fields)
+                derived_fields.update(extra_fields)
+            data = Data(**converted)
+            data._derived_fields = derived_fields
+            return data
 
         return _convert

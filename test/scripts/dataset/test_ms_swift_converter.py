@@ -1,8 +1,9 @@
 """Verify evaluator isolation, source preservation and usable rule inputs."""
 
 import copy
+import importlib
 import json
-from pathlib import Path
+import pickle
 
 import pytest
 
@@ -58,7 +59,8 @@ def record():
 def test_independent_fields_and_source_preservation(record, as_json):
     original = copy.deepcopy(record)
     raw = json.dumps(record, ensure_ascii=False) if as_json else record
-    converted = converters["ms_swift"].convertor(make_args())(raw).to_dict()
+    data = converters["ms_swift"].convertor(make_args())(raw)
+    converted = data.to_dict()
     assert record == original
     assert {key: converted[key] for key in original} == original
     assert set(converted) - set(original) == {
@@ -67,6 +69,8 @@ def test_independent_fields_and_source_preservation(record, as_json):
         "LLMAgentToolCorrectness_prompt", "LLMAgentToolCorrectness_content",
         "RuleAgentTraceDestructiveAction_content",
     }
+    assert data._derived_fields == set(converted) - set(original)
+    assert "_derived_fields" not in data.model_dump()
     for name in ("LLMAgentTaskCompletion", "LLMAgentToolCorrectness"):
         assert converted[f"{name}_prompt"] == ""
         assert "资料" in converted[f"{name}_content"]
@@ -87,12 +91,14 @@ def test_independent_fields_and_source_preservation(record, as_json):
 
 @pytest.mark.parametrize("name", EVALUATORS)
 def test_generates_only_selected_evaluator_fields(record, name):
-    converted = converters["ms_swift"].convertor(make_args((name,)))(record).to_dict()
+    data = converters["ms_swift"].convertor(make_args((name,)))(record)
+    converted = data.to_dict()
     added = set(converted) - set(record)
     expected = {f"{name}_content"}
     if name.startswith("LLM"):
         expected.add(f"{name}_prompt")
     assert added == expected
+    assert data._derived_fields == expected
 
 
 def test_llm_conversion_does_not_parse_omitted_tool_calls(record):
@@ -103,7 +109,33 @@ def test_llm_conversion_does_not_parse_omitted_tool_calls(record):
 
 @pytest.mark.parametrize("names", [(), ("RuleAbnormalChar",)])
 def test_no_supported_evaluator_preserves_original_only(record, names):
-    assert converters["ms_swift"].convertor(make_args(names))(record).to_dict() == record
+    data = converters["ms_swift"].convertor(make_args(names))(record)
+    assert data.to_dict() == record
+    assert data._derived_fields == set()
+
+
+def test_tracks_actual_fields_per_record_without_a_static_list(monkeypatch):
+    module = importlib.import_module("dingo.data.converter.ms_swift")
+
+    def prepare(record):
+        return {f"custom_{record['data_id']}": "derived"}
+
+    monkeypatch.setitem(module._PREPARERS, "RuleAgentTraceLoopDetection", prepare)
+    convert = converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))
+    first = convert({"messages": [], "data_id": "first"})
+    second = convert({"messages": [], "data_id": "second"})
+    assert first._derived_fields == {"custom_first"}
+    assert second._derived_fields == {"custom_second"}
+    assert pickle.loads(pickle.dumps(first))._derived_fields == {"custom_first"}
+
+
+def test_rejects_derived_field_collision_without_overwriting_source(record):
+    field = "RuleAgentTraceLoopDetection_content"
+    record[field] = "user value"
+    original = copy.deepcopy(record)
+    with pytest.raises(ValueError, match=field):
+        converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))(record)
+    assert record == original
 
 
 def test_converted_sequence_can_detect_loops(record):
@@ -138,9 +170,13 @@ def test_destructive_rule_input_and_unchanged_cmd(record):
     assert "call 1" in result.reason[0]
 
 
-def test_example_mapping_builds_llm_messages_with_empty_prompts(record):
-    example = Path(__file__).resolve().parents[3] / "examples/dataset/ms_swift.json"
-    args = InputArgs(**json.loads(example.read_text(encoding="utf-8")))
+def test_field_mapping_builds_llm_messages_with_empty_prompts(record):
+    args = make_args()
+    for pipeline in args.evaluator:
+        name = pipeline.evals[0].name
+        pipeline.fields = {"content": f"{name}_content"}
+        if name.startswith("LLM"):
+            pipeline.fields["prompt"] = f"{name}_prompt"
     converted = converters["ms_swift"].convertor(args)(record).to_dict()
     models = {"LLMAgentTaskCompletion": LLMAgentTaskCompletion, "LLMAgentToolCorrectness": LLMAgentToolCorrectness}
     for pipeline in args.evaluator:
