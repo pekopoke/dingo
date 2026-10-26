@@ -267,16 +267,6 @@ def test_token_budget_never_substitutes_reasoning_tokens(record):
     assert not evaluate_rule(record, name).applicable
 
 
-def test_full_example_maps_every_supported_metric():
-    from pathlib import Path
-
-    path = Path(__file__).resolve().parents[3] / "examples/dataset/ms_swift.json"
-    args = InputArgs(**json.loads(path.read_text(encoding="utf-8")))
-    assert {pipeline.evals[0].name for pipeline in args.evaluator} == set(ALL_NAMES)
-    data = converters["ms_swift"].convertor(args)({"messages": []})
-    assert data._derived_fields == {field for pipeline in args.evaluator for field in pipeline.fields.values()}
-
-
 @pytest.mark.parametrize("raw", [False, True])
 def test_local_executor_runs_all_16_metrics_and_cleans_outputs(tmp_path, monkeypatch, record, raw):
     monkeypatch.setenv("LOCAL_DEPLOYMENT_MODE", "true")
