@@ -59,8 +59,8 @@ MinerU 支持的 block 类型包括：`text`, `title`, `image`, `table`, `equati
 
 读取 Agent 轨迹 JSONL，每行一个包含 `messages` 数组的对象。保留原始字段，
 只为 `evaluator[].evals` 中选中的已支持指标生成 `<指标名>_<字段名>` 字段。
-每个指标使用独立的 `fields` 映射配置块。当前支持四个指标，映射及配置示例见
-[ms-swift converter 使用说明](ms_swift_converter.md)。
+每个指标使用独立的 `fields` 映射配置块。当前支持 9 个确定性规则和 7 个 LLM 指标，
+映射及配置示例见 [ms-swift converter 用户说明](agent_trace/ms_swift.md)。
 
 #### DatasetField 配置 (dataset.field)
 
