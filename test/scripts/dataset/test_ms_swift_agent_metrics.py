@@ -3,6 +3,7 @@
 import copy
 import importlib
 import json
+from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 import pytest
 
@@ -13,7 +14,6 @@ from dingo.io import Data, ResultInfo
 from dingo.model import Model
 from dingo.model.llm.base_openai import BaseOpenAI
 from dingo.model.rule import rule_agent
-from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 RULE_NAMES = (
     "RuleAgentTraceDestructiveAction", "RuleAgentTraceGatewayBypass", "RuleAgentTraceIntegrity",

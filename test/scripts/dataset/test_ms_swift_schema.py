@@ -1,12 +1,11 @@
 import copy
+from test.scripts.ms_swift_test_utils import standard_ms_swift_record
 
 import pytest
 
 from dingo.config import InputArgs
 from dingo.data.converter import converters
 from dingo.data.converter.ms_swift_schema import validate_ms_swift_record
-from test.scripts.ms_swift_test_utils import standard_ms_swift_record
-
 
 REQUIRED_TOP_LEVEL_FIELDS = (
     "messages", "tools", "termination", "source", "harness", "model",

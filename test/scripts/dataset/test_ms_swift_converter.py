@@ -4,6 +4,7 @@ import copy
 import importlib
 import json
 import pickle
+from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 import pytest
 
@@ -15,7 +16,6 @@ from dingo.io import Data
 from dingo.model.llm.agent_eval.llm_agent_task_completion import LLMAgentTaskCompletion
 from dingo.model.llm.agent_eval.llm_agent_tool_correctness import LLMAgentToolCorrectness
 from dingo.model.rule.rule_agent import RuleAgentTraceDestructiveAction, RuleAgentTraceLoopDetection
-from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 EVALUATORS = (
     "LLMAgentTaskCompletion",

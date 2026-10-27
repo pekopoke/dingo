@@ -55,8 +55,7 @@ def prepare_rule_agent_trace_loop_detection(record: Dict[str, Any]) -> Dict[str,
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
+        for call in tool_calls:
             name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
@@ -86,8 +85,7 @@ def prepare_rule_agent_trace_destructive_action(record: Dict[str, Any]) -> Dict[
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
+        for call in tool_calls:
             name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
@@ -247,8 +245,7 @@ def prepare_rule_agent_trace_sandbox_explicitly_disabled(record: Dict[str, Any])
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
+        for call in tool_calls:
             name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
@@ -317,8 +314,7 @@ def prepare_rule_agent_trace_sensitive_access(record: Dict[str, Any]) -> Dict[st
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
+        for call in tool_calls:
             name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)

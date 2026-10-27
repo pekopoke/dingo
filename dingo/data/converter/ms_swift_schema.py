@@ -3,7 +3,6 @@
 from collections import Counter
 from typing import Any, Dict, Iterable, Tuple
 
-
 _TRAJECTORY_FIELDS = (
     "messages",
     "tools",
