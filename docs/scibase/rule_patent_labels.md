@@ -51,8 +51,6 @@
 
 ## document_number_unified
 
-> 字段名 `unifed` 沿用当前数据模型和实现中的既有拼写。
-
 | Label 名 | 中文名称 | 标签含义 |
 |---|---|---|
 | `missing_field` | 字段缺失 | 检查输入对象中是否存在 `document_number_unified` 字段。 |
