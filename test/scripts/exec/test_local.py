@@ -7,6 +7,7 @@ from dingo.exec import Executor, LocalExecutor
 from dingo.io import ResultInfo
 from dingo.io.output.eval_detail import EvalDetail, TokenUsage
 from dingo.model import Model
+from test.scripts.ms_swift_test_utils import standard_ms_swift_record
 
 
 class TestLocal:
@@ -19,16 +20,20 @@ class TestLocal:
         field = "RuleAgentTraceLoopDetection_content"
         records = []
         for index in range(2):
-            records.append({
-                "data_id": f"trace-{index}",
-                "metadata": {field: "nested source value"},
-                "LLMAgentToolCorrectness_content": "unselected source field",
-                "messages": [{"role": "assistant", "tool_calls": [
-                    {"function": {"name": "search", "arguments": {
+            record = standard_ms_swift_record(
+                data_id=f"trace-{index}",
+                LLMAgentToolCorrectness_content="unselected source field",
+                messages=[{
+                    "role": "assistant", "content": "", "reasoning_content": "",
+                    "tool_calls": [
+                    {"type": "function", "id": f"call-{call}", "function": {
+                        "name": "search", "arguments": {
                         "query": "same" if index == 0 else str(call),
                     }}} for call in range(6)
                 ]}],
-            })
+            )
+            record["metadata"][field] = "nested source value"
+            records.append(record)
         input_path = tmp_path / "traces.jsonl"
         input_path.write_text(
             "\n".join(json.dumps(record) for record in records), encoding="utf-8",

@@ -13,6 +13,7 @@ from dingo.io import Data, ResultInfo
 from dingo.model import Model
 from dingo.model.llm.base_openai import BaseOpenAI
 from dingo.model.rule import rule_agent
+from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 RULE_NAMES = (
     "RuleAgentTraceDestructiveAction", "RuleAgentTraceGatewayBypass", "RuleAgentTraceIntegrity",
@@ -60,20 +61,30 @@ def evaluate_rule(record, name):
 
 @pytest.fixture
 def record():
-    return {
-        "data_id": "trace-1", "total_tool_calls": 2, "total_tokens": 600001,
-        "tools": [{"name": "search"}],
-        "messages": [
+    return standard_ms_swift_record(
+        data_id="trace-1", total_tokens=600001,
+        tools=[{
+            "type": "function", "name": "search", "description": "Search",
+            "parameters": {},
+        }, {
+            "type": "function", "name": "read", "description": "Read",
+            "parameters": {},
+        }],
+        messages=[
             {"role": "user", "content": "查找文档并总结结果"},
             {"role": "assistant", "content": "", "reasoning_content": "这是推理，不一定是计划", "tool_calls": [
-                {"id": "a", "function": {"name": "search", "arguments": {"query": "documents"}}},
-                {"id": "b", "function": {"name": "read", "arguments": {"path": "notes.txt"}}},
+                {"type": "function", "id": "a", "function": {
+                    "name": "search", "arguments": {"query": "documents"},
+                }},
+                {"type": "function", "id": "b", "function": {
+                    "name": "read", "arguments": {"path": "notes.txt"},
+                }},
             ]},
-            {"role": "tool", "tool_call_id": "b", "content": "document"},
-            {"role": "tool", "tool_call_id": "a", "content": "found"},
-            {"role": "assistant", "content": "已完成"},
+            {"role": "tool", "name": "read", "tool_call_id": "b", "content": "document"},
+            {"role": "tool", "name": "search", "tool_call_id": "a", "content": "found"},
+            {"role": "assistant", "content": "已完成", "reasoning_content": ""},
         ],
-    }
+    )
 
 
 @pytest.mark.parametrize("name", ALL_NAMES)
@@ -137,7 +148,7 @@ def test_secret_results_are_paired_by_id_even_when_return_order_differs(record):
 
 
 def test_missing_result_is_not_guessed_from_an_unrelated_tool_message(record):
-    record["messages"][2]["tool_call_id"] = "unrelated"
+    record["messages"].pop(2)
     payload = json.loads(convert(record).RuleAgentTraceSecretExposure_content)
     assert "result" not in payload["tool_calls"][1]
     integrity = json.loads(convert(record).RuleAgentTraceIntegrity_content)
@@ -157,11 +168,10 @@ def test_tool_call_preparers_parse_json_arguments_without_changing_source(record
 
 
 @pytest.mark.parametrize("name", RULE_NAMES[:-1])
-def test_rule_preparers_reject_invalid_arguments_without_changing_source(record, name):
+def test_rule_preparers_accept_non_object_arguments_allowed_by_standard(record, name):
     record["messages"][1]["tool_calls"][1]["function"]["arguments"] = "invalid JSON"
     original = copy.deepcopy(record)
-    with pytest.raises(ValueError, match=r"messages\[1\].tool_calls\[1\].function.arguments"):
-        convert(record, (name,))
+    convert(record, (name,))
     assert record == original
 
 
@@ -180,15 +190,22 @@ def test_ambiguous_call_ids_fail_instead_of_using_the_wrong_result(record, name,
 
 
 def test_gateway_maps_explicit_status_without_changing_rule_behavior():
-    record = {"messages": [
-        {"role": "assistant", "tool_calls": [
-            {"id": "a", "function": {"name": "WebFetch", "arguments": {"url": "https://example.org"}}},
+    record = standard_ms_swift_record(messages=[
+        {"role": "assistant", "content": "", "reasoning_content": "", "tool_calls": [
+            {"type": "function", "id": "a", "function": {
+                "name": "WebFetch", "arguments": {"url": "https://example.org"},
+            }},
         ]},
-        {"role": "tool", "tool_call_id": "a", "status": "error", "content": "GATEWAY BLOCKED"},
-        {"role": "assistant", "tool_calls": [
-            {"id": "b", "function": {"name": "shell", "arguments": {"command": "curl https://example.org"}}},
+        {
+            "role": "tool", "name": "WebFetch", "tool_call_id": "a",
+            "status": "error", "content": "GATEWAY BLOCKED",
+        },
+        {"role": "assistant", "content": "", "reasoning_content": "", "tool_calls": [
+            {"type": "function", "id": "b", "function": {
+                "name": "shell", "arguments": {"command": "curl https://example.org"},
+            }},
         ]},
-    ]}
+    ])
     name = "RuleAgentTraceGatewayBypass"
     assert evaluate_rule(record, name).status
     record["messages"][1].pop("status")
@@ -196,22 +213,20 @@ def test_gateway_maps_explicit_status_without_changing_rule_behavior():
     record["messages"][2]["tool_calls"][0]["function"] = {
         "name": "exec_command", "arguments": {"cmd": "curl https://example.org"},
     }
+    refresh_ms_swift_statistics(record)
     payload = json.loads(getattr(convert(record, (name,)), f"{name}_content"))
     assert "status" not in payload["tool_calls"][0]
     assert payload["tool_calls"][1]["tool_name"] == "exec_command"
     assert payload["tool_calls"][1]["args"] == {"cmd": "curl https://example.org"}
 
 
-def test_integrity_compares_actual_count_with_source_counter(record):
+def test_integrity_uses_valid_source_counter_and_schema_rejects_mismatch(record):
     name = "RuleAgentTraceIntegrity"
     payload = json.loads(getattr(convert(record, (name,)), f"{name}_content"))
     assert payload == {"tool_calls_expected": 2, "tool_spans_recorded": 2, "open_observation_count": 0}
     record["total_tool_calls"] = 3
-    assert evaluate_rule(record, name).status
-    record.pop("total_tool_calls")
-    payload = json.loads(getattr(convert(record, (name,)), f"{name}_content"))
-    assert "tool_calls_expected" not in payload
-    assert "trace_truncated" not in payload
+    with pytest.raises(ValueError, match=r"total_tool_calls.*actual tool-call count 2"):
+        convert(record, (name,))
 
 
 def test_latency_is_na_without_explicit_timings_and_uses_recorded_extensions(record):
@@ -219,9 +234,15 @@ def test_latency_is_na_without_explicit_timings_and_uses_recorded_extensions(rec
     assert not evaluate_rule(record, name).applicable
     calls = record["messages"][1]["tool_calls"]
     record["messages"][1]["tool_calls"] = [
-        {"function": calls[0]["function"], "duration": 1 if index < 10 else 100, "group": "tool"}
+        {
+            "type": "function", "id": f"latency-{index}",
+            "function": calls[0]["function"],
+            "duration": 1 if index < 10 else 100, "group": "tool",
+        }
         for index in range(11)
     ]
+    record["messages"] = record["messages"][:2] + record["messages"][4:]
+    refresh_ms_swift_statistics(record)
     payload = json.loads(getattr(convert(record, (name,)), f"{name}_content"))
     assert payload["steps"][-1] == {"name": "search", "duration": 100, "group": "tool"}
     assert evaluate_rule(record, name).status
@@ -229,7 +250,7 @@ def test_latency_is_na_without_explicit_timings_and_uses_recorded_extensions(rec
 
 def test_latency_pairs_timings_by_id_and_prefers_tool_message_extensions(record):
     name = "RuleAgentTraceLatencyAnomaly"
-    record["messages"][1]["tool_calls"][0].update(duration=10, group="call", type="source")
+    record["messages"][1]["tool_calls"][0].update(duration=10, group="call")
     record["messages"][1]["tool_calls"][1].update(duration_seconds=20, group="fallback")
     record["messages"][3].update(duration=1, group="observation", type="tool")
     payload = json.loads(getattr(convert(record, (name,)), f"{name}_content"))

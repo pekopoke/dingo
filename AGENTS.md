@@ -44,6 +44,8 @@ dingo/
 │   │   ├── dataset/         ← Dataset implementations per source
 │   │   ├── searcher.py      ← Searcher protocol + SearchResult + registry (mock, ES)
 │   │   └── converter/       ← Format converters (JSON, JSONL, CSV, Parquet, MinerU, etc.)
+│   │       ├── ms_swift.py  ← ms-swift evaluator-field preparation
+│   │       └── ms_swift_schema.py ← Full standardized-delivery validation
 │   ├── model/
 │   │   ├── model.py         ← Model registry (rule_register, llm_register)
 │   │   ├── rule/            ← Rule-based evaluators (80+ built-in)
@@ -171,7 +173,9 @@ input_data = {
 
 MinerU formats automatically flatten blocks into `Data` objects, preserving all original fields (type, bbox, page_idx, etc.) via Pydantic `extra="allow"`. Use `dataset.mineru_config.include_types` to filter by block type.
 
-The `ms_swift` converter lives in `dingo/data/converter/ms_swift.py`. It prepares
+The `ms_swift` converter lives in `dingo/data/converter/ms_swift.py` and validates
+each record against the full standardized delivery contract in
+`dingo/data/converter/ms_swift_schema.py` before preparing any derived fields. It prepares
 independent `<EvaluatorName>_<field>` fields for all 9 deterministic Agent rules
 and 7 Agent LLM metrics, only when selected in `evaluator[].evals`.
 Each deterministic rule owns its parsing and field assembly in its `prepare_*`
