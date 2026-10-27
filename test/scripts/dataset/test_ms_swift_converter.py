@@ -4,6 +4,7 @@ import copy
 import importlib
 import json
 import pickle
+from test.scripts.ms_swift_test_utils import refresh_ms_swift_statistics, standard_ms_swift_record
 
 import pytest
 
@@ -34,25 +35,34 @@ def make_args(names=EVALUATORS, **kwargs):
 
 @pytest.fixture
 def record():
-    return {
-        "data_id": "trace-1",
-        "tools": [{"name": "search", "description": "Search documents"}],
-        "metadata": {"source": "example"},
-        "messages": [
-            {"role": "developer", "content": "遵循用户要求"},
+    return standard_ms_swift_record(
+        tools=[{
+            "type": "function", "name": "search", "description": "Search documents",
+            "parameters": {},
+        }, {
+            "type": "function", "name": "read", "description": "Read documents",
+            "parameters": {},
+        }],
+        messages=[
+            {"role": "system", "content": "遵循用户要求"},
             {"role": "user", "content": "查找资料"},
             {
                 "role": "assistant", "content": "", "reasoning_content": "先搜索",
                 "tool_calls": [
-                    {"id": "call-1", "function": {"name": "search", "arguments": {"query": "资料"}}},
-                    {"id": "call-2", "function": {"name": "read", "arguments": '{"path": "notes.txt"}'}},
+                    {"type": "function", "id": "call-1", "function": {
+                        "name": "search", "arguments": {"query": "资料"},
+                    }},
+                    {"type": "function", "id": "call-2", "function": {
+                        "name": "read", "arguments": {"path": "notes.txt"},
+                    }},
                 ],
             },
             {"role": "tool", "name": "search", "tool_call_id": "call-1", "content": "找到了"},
             {"role": "tool", "name": "read", "tool_call_id": "call-2", "content": "资料正文"},
-            {"role": "assistant", "content": "已完成"},
+            {"role": "assistant", "content": "已完成", "reasoning_content": ""},
         ],
-    }
+        data_id="trace-1",
+    )
 
 
 @pytest.mark.parametrize("as_json", [False, True])
@@ -75,7 +85,7 @@ def test_independent_fields_and_source_preservation(record, as_json):
         assert converted[f"{name}_prompt"] == ""
         assert "资料" in converted[f"{name}_content"]
         assert json.loads(converted[f"{name}_content"]) == [
-            {"role": "developer", "content": "遵循用户要求"},
+            {"role": "system", "content": "遵循用户要求"},
             {"role": "user", "content": "查找资料"},
             {"role": "assistant", "content": ""},
             {"role": "tool", "content": "找到了"},
@@ -101,10 +111,10 @@ def test_generates_only_selected_evaluator_fields(record, name):
     assert data._derived_fields == expected
 
 
-def test_llm_conversion_does_not_parse_omitted_tool_calls(record):
+def test_format_validation_precedes_llm_projection(record):
     record["messages"][2]["tool_calls"] = "not a valid tool call list"
-    converted = converters["ms_swift"].convertor(make_args(("LLMAgentTaskCompletion",)))(record)
-    assert json.loads(converted.LLMAgentTaskCompletion_content)[2] == {"role": "assistant", "content": ""}
+    with pytest.raises(ValueError, match="tool_calls must be a list"):
+        converters["ms_swift"].convertor(make_args(("LLMAgentTaskCompletion",)))(record)
 
 
 @pytest.mark.parametrize("names", [(), ("RuleAbnormalChar",)])
@@ -122,8 +132,8 @@ def test_tracks_actual_fields_per_record_without_a_static_list(monkeypatch):
 
     monkeypatch.setitem(module._PREPARERS, "RuleAgentTraceLoopDetection", prepare)
     convert = converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))
-    first = convert({"messages": [], "data_id": "first"})
-    second = convert({"messages": [], "data_id": "second"})
+    first = convert(standard_ms_swift_record(data_id="first"))
+    second = convert(standard_ms_swift_record(data_id="second"))
     assert first._derived_fields == {"custom_first"}
     assert second._derived_fields == {"custom_second"}
     assert pickle.loads(pickle.dumps(first))._derived_fields == {"custom_first"}
@@ -140,7 +150,13 @@ def test_rejects_derived_field_collision_without_overwriting_source(record):
 
 def test_converted_sequence_can_detect_loops(record):
     calls = record["messages"][2]["tool_calls"]
-    record["messages"][2]["tool_calls"] = calls * 3
+    record["messages"] = record["messages"][:3]
+    record["messages"][2]["tool_calls"] = [
+        dict(copy.deepcopy(call), id=f"loop-{repeat}-{index}")
+        for repeat in range(3)
+        for index, call in enumerate(calls)
+    ]
+    refresh_ms_swift_statistics(record)
     converted = converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))(record)
     result = RuleAgentTraceLoopDetection.eval(Data(content=converted.RuleAgentTraceLoopDetection_content))
     assert result.applicable
@@ -148,9 +164,12 @@ def test_converted_sequence_can_detect_loops(record):
     assert "Loop detected" in result.reason[0]
     # Six calls with different arguments must not turn into a name-only loop.
     record["messages"][2]["tool_calls"] = [
-        {"function": {"name": "search", "arguments": {"query": str(index)}}}
+        {"type": "function", "id": f"search-{index}", "function": {
+            "name": "search", "arguments": {"query": str(index)},
+        }}
         for index in range(6)
     ]
+    refresh_ms_swift_statistics(record)
     converted = converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))(record)
     result = RuleAgentTraceLoopDetection.eval(Data(content=converted.RuleAgentTraceLoopDetection_content))
     assert result.applicable
@@ -159,9 +178,15 @@ def test_converted_sequence_can_detect_loops(record):
 
 def test_destructive_rule_input_and_unchanged_cmd(record):
     record["messages"][2]["tool_calls"] = [
-        {"function": {"name": "shell", "arguments": {"command": "rm -rf /important"}}},
-        {"function": {"name": "exec_command", "arguments": {"cmd": "rm -rf /other"}}},
+        {"type": "function", "id": "shell-1", "function": {
+            "name": "shell", "arguments": {"command": "rm -rf /important"},
+        }},
+        {"type": "function", "id": "shell-2", "function": {
+            "name": "exec_command", "arguments": {"cmd": "rm -rf /other"},
+        }},
     ]
+    record["messages"] = record["messages"][:3]
+    refresh_ms_swift_statistics(record)
     converted = converters["ms_swift"].convertor(make_args(("RuleAgentTraceDestructiveAction",)))(record)
     content = converted.RuleAgentTraceDestructiveAction_content
     assert json.loads(content)["tool_calls"][1]["args"] == {"cmd": "rm -rf /other"}
@@ -202,14 +227,20 @@ def test_local_dataset_reads_jsonl_records_and_filters_directory(tmp_path, recor
     assert all(json.loads(item.RuleAgentTraceLoopDetection_content)["tool_calls"] for item in data)
 
 
-@pytest.mark.parametrize("raw, message", [
-    ([], "record must be a JSON object"),
-    ({}, "messages must be a list"),
-    ({"messages": [None]}, r"messages\[0\] must be an object"),
-    ({"messages": [{"role": "assistant", "tool_calls": {}}]}, "tool_calls must be a list"),
-    ({"messages": [{"role": "assistant", "tool_calls": [{"function": {"name": "x", "arguments": "bad"}}]}]},
-     "arguments must contain a JSON object"),
+def test_missing_required_delivery_fields_has_actionable_error():
+    with pytest.raises(ValueError, match=r"missing required field.*tools"):
+        converters["ms_swift"].convertor(make_args(()))({"messages": []})
+
+
+@pytest.mark.parametrize("mutate, message", [
+    (lambda item: item.update(messages=[None]), r"messages\[0\] must be an object"),
+    (lambda item: item.update(messages=[{
+        "role": "assistant", "content": "", "reasoning_content": "", "tool_calls": {},
+    }]), "tool_calls must be a list"),
+    (lambda item: item["messages"][0].pop("content"), r"messages\[0\].*missing required field.*content"),
 ])
-def test_invalid_structure_has_actionable_error(raw, message):
+def test_invalid_structure_has_actionable_error(mutate, message):
+    record = standard_ms_swift_record(messages=[{"role": "user", "content": "x"}])
+    mutate(record)
     with pytest.raises(ValueError, match=message):
-        converters["ms_swift"].convertor(make_args(("RuleAgentTraceLoopDetection",)))(raw)
+        converters["ms_swift"].convertor(make_args(()))(record)

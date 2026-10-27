@@ -15,10 +15,17 @@ converter 只为 `evaluator[].evals` 中选中的指标生成辅助字段，并�
 
 ## 一、输入约定
 
-- `messages` 必须是数组，每条消息必须是对象。LLM 指标读取全部消息；确定性规则按各自需要读取工具调用或顶层统计。
-- 读取工具调用时，仅读取 `role="assistant"` 的 `tool_calls`；该键缺失或为 `null` 时按空列表处理，其他非数组值会报错。
-- 每次调用必须有对象类型的 `function` 和非空字符串 `function.name`。`arguments` 缺失时为 `{}`；对象原样使用，JSON 字符串解析为对象，显式 `null`、数组或无效 JSON 均会报错。
-- 需要配对工具结果的指标只使用非空字符串 ID。数字、空字符串或缺失 ID 不参与配对；有效调用 ID 或有效工具返回 ID 重复时会报错。
+- converter 按《轨迹数据的标准化格式》的完整交付口径校验每条记录，校验与所选指标无关，并且发生在生成任何辅助字段之前。
+- 顶层必选字段为：`messages`、`tools`、`termination`、`source`、`harness`、`model`、`total_rounds`、`total_tool_calls`、`tool_counts`、`reasoning_total_tokens`、`tool_defs_tag`、`missing_tool_defs`、`tool_call_tag`、`tool_call_check`、`server_tool_calls`、`metadata`、`completeness_tag`、`completeness`。字段必须存在且类型正确，允许规范明确支持的空字符串、空数组或空对象。
+- `sub_agent_trajectory` 和 `sub_agent_relay_mounts` 是可选字段；存在 `sub_agent_trajectory` 时递归校验每个子轨迹。子轨迹不要求顶层专属的 `completeness_tag` 和 `completeness`。
+- 所有消息必须包含字符串型 `role` 和 `content`；允许的角色为 `system`、`developer`、`user`、`assistant`、`tool`。assistant 消息还必须包含字符串型 `reasoning_content`；tool 消息还必须包含字符串型 `tool_call_id` 和 `name`。
+- `tool_calls` 仅在至少有一次调用时出现。每个调用必须包含 `type="function"`、字符串型 `id`，以及含 `name`、`arguments` 的 `function` 对象。
+- `tools` 中每个定义必须包含 `type="function"`、`name`、`description` 和对象类型的 `parameters`。
+- `total_rounds`、`total_tool_calls`、`tool_counts` 和 `tool_call_check.total_calls` 必须与当前节点的 `messages` 一致；tool 消息的 `tool_call_id` 必须能匹配当前节点中的调用。
+- 工具调用没有返回、调用缺少工具定义、参数与 schema 不一致或轨迹没有最终回复属于质量或完整性问题，不属于格式错误；这些情况由质量标签、`tool_call_check` 和 `completeness` 表达。
+- 读取工具调用时，仅读取 `role="assistant"` 的 `tool_calls`；该键可以缺失，存在时必须是数组，空数组按规范保留，不能用 `null` 代替。
+- 每次调用必须有 `type="function"`、字符串型唯一 `id`、对象类型的 `function`、非空字符串 `function.name` 和 `function.arguments`。`arguments` 可以是任意 JSON 值；为兼容旧数据，其中可解析的 JSON 字符串仍会在构造规则输入时解析，但不会修改原始记录。
+- tool 消息的 `tool_call_id` 必须匹配当前节点的调用；调用不一定有工具返回。重复调用 ID 会按格式错误处理；preparer 需要建立返回索引时也会拒绝重复的工具返回 ID。
 
 ## 二、确定性规则
 

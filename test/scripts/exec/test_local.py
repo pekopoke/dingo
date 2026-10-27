@@ -1,4 +1,5 @@
 import json
+from test.scripts.ms_swift_test_utils import standard_ms_swift_record
 
 import pytest
 
@@ -19,16 +20,20 @@ class TestLocal:
         field = "RuleAgentTraceLoopDetection_content"
         records = []
         for index in range(2):
-            records.append({
-                "data_id": f"trace-{index}",
-                "metadata": {field: "nested source value"},
-                "LLMAgentToolCorrectness_content": "unselected source field",
-                "messages": [{"role": "assistant", "tool_calls": [
-                    {"function": {"name": "search", "arguments": {
-                        "query": "same" if index == 0 else str(call),
-                    }}} for call in range(6)
-                ]}],
-            })
+            record = standard_ms_swift_record(
+                data_id=f"trace-{index}",
+                LLMAgentToolCorrectness_content="unselected source field",
+                messages=[{
+                    "role": "assistant", "content": "", "reasoning_content": "",
+                    "tool_calls": [
+                        {"type": "function", "id": f"call-{call}", "function": {
+                            "name": "search", "arguments": {
+                                "query": "same" if index == 0 else str(call),
+                            }}} for call in range(6)
+                    ]}],
+            )
+            record["metadata"][field] = "nested source value"
+            records.append(record)
         input_path = tmp_path / "traces.jsonl"
         input_path.write_text(
             "\n".join(json.dumps(record) for record in records), encoding="utf-8",
@@ -502,9 +507,13 @@ class TestLocal:
         executor = Executor.exec_map["local"](input_args)
         result = executor.execute()
         print(result)
-        assert all([item in result.type_ratio.get('content') for item in ["QUALITY_BAD_EFFECTIVENESS.RuleColonEnd",
-                                                      "QUALITY_BAD_EFFECTIVENESS.RuleSpecialCharacter",
-                                                      "QUALITY_GOOD"]])
+        assert all([
+            item in result.type_ratio.get('content') for item in [
+                "QUALITY_BAD_EFFECTIVENESS.RuleColonEnd",
+                "QUALITY_BAD_EFFECTIVENESS.RuleSpecialCharacter",
+                "QUALITY_GOOD",
+            ]
+        ])
         label_stats = {
             item.label: item
             for item in result.label_stats["content"]
@@ -518,8 +527,12 @@ class TestLocal:
         input_args = InputArgs(**input_data)
         executor = Executor.exec_map["local"](input_args)
         result = executor.execute()
-        assert all([item in result.type_ratio.get('content') for item in ["QUALITY_BAD_EFFECTIVENESS.RuleColonEnd",
-                                                           "QUALITY_BAD_EFFECTIVENESS.RuleSpecialCharacter"]])
+        assert all([
+            item in result.type_ratio.get('content') for item in [
+                "QUALITY_BAD_EFFECTIVENESS.RuleColonEnd",
+                "QUALITY_BAD_EFFECTIVENESS.RuleSpecialCharacter",
+            ]
+        ])
 
     def test_metrics_score_collection_with_scores(self):
         """测试带有分数的指标评估时，summary 正确收集和计算分数"""

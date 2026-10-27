@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, Union
 
 from dingo.config import InputArgs
 from dingo.data.converter.base import BaseConverter
+from dingo.data.converter.ms_swift_schema import validate_ms_swift_record
 from dingo.io import Data
 
 
@@ -20,6 +21,19 @@ def _messages_content(record: Dict[str, Any]) -> str:
         for message in record["messages"]
     ]
     return json.dumps(messages, ensure_ascii=False)
+
+
+def _tool_call_name_and_arguments(call: Dict[str, Any]):
+    """Read fields already guaranteed by the standardized-format validator."""
+    function = call["function"]
+    arguments = function["arguments"]
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            # A string is itself a valid JSON value under the standard.
+            pass
+    return function["name"], arguments
 
 
 def prepare_llm_agent_task_completion(record: Dict[str, Any]) -> Dict[str, str]:
@@ -41,22 +55,8 @@ def prepare_rule_agent_trace_loop_detection(record: Dict[str, Any]) -> Dict[str,
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+        for call in tool_calls:
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
     return {
@@ -85,22 +85,8 @@ def prepare_rule_agent_trace_destructive_action(record: Dict[str, Any]) -> Dict[
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+        for call in tool_calls:
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
     return {
@@ -131,20 +117,7 @@ def prepare_rule_agent_trace_gateway_bypass(record: Dict[str, Any]) -> Dict[str,
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
         for call_index, call in enumerate(tool_calls):
             path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             call_id = call.get("id")
             observation = {}
@@ -192,20 +165,7 @@ def prepare_rule_agent_trace_integrity(record: Dict[str, Any]) -> Dict[str, str]
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
         for call_index, call in enumerate(tool_calls):
             path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+            name, arguments = _tool_call_name_and_arguments(call)
             tool_spans_recorded += 1
             call_id = call.get("id")
             if isinstance(call_id, str) and call_id:
@@ -248,20 +208,7 @@ def prepare_rule_agent_trace_latency_anomaly(record: Dict[str, Any]) -> Dict[str
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
         for call_index, call in enumerate(tool_calls):
             path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+            name, arguments = _tool_call_name_and_arguments(call)
             step = {"name": name}
             call_id = call.get("id")
             observation = {}
@@ -273,9 +220,16 @@ def prepare_rule_agent_trace_latency_anomaly(record: Dict[str, Any]) -> Dict[str
             # Copy recorded timings and groups, preferring matched tool results.
             for key in ("duration", "duration_seconds", "group", "type"):
                 if key in observation:
-                    step[key] = observation[key]
+                    value = observation[key]
                 elif key in call:
-                    step[key] = call[key]
+                    value = call[key]
+                else:
+                    continue
+                # Standard ms-swift reserves call.type="function" for the
+                # invocation kind; it is not a latency peer-group label.
+                if key == "type" and value == "function":
+                    continue
+                step[key] = value
             steps.append(step)
     return {"RuleAgentTraceLatencyAnomaly_content": json.dumps({"steps": steps}, ensure_ascii=False)}
 
@@ -291,22 +245,8 @@ def prepare_rule_agent_trace_sandbox_explicitly_disabled(record: Dict[str, Any])
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+        for call in tool_calls:
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
     return {
@@ -337,20 +277,7 @@ def prepare_rule_agent_trace_secret_exposure(record: Dict[str, Any]) -> Dict[str
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
         for call_index, call in enumerate(tool_calls):
             path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             call_id = call.get("id")
             observation = {}
@@ -387,22 +314,8 @@ def prepare_rule_agent_trace_sensitive_access(record: Dict[str, Any]) -> Dict[st
             tool_calls = []
         if not isinstance(tool_calls, list):
             raise ValueError(f"ms_swift messages[{message_index}].tool_calls must be a list")
-        for call_index, call in enumerate(tool_calls):
-            path = f"ms_swift messages[{message_index}].tool_calls[{call_index}].function"
-            function = call.get("function") if isinstance(call, dict) else None
-            if not isinstance(function, dict):
-                raise ValueError(f"{path} must be an object")
-            name = function.get("name")
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"{path}.name must be a non-empty string")
-            arguments = function.get("arguments", {})
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"{path}.arguments must contain a JSON object") from error
-            if not isinstance(arguments, dict):
-                raise ValueError(f"{path}.arguments must be an object")
+        for call in tool_calls:
+            name, arguments = _tool_call_name_and_arguments(call)
             item = {"tool_name": name, "args": arguments}
             calls.append(item)
     return {
@@ -493,15 +406,16 @@ class MsSwiftConverter(BaseConverter):
         preparers = [prepare for name, prepare in _PREPARERS.items() if name in selected_names]
 
         def _convert(raw: Union[str, Dict[str, Any]]) -> Data:
-            record = json.loads(raw) if isinstance(raw, str) else raw
-            if not isinstance(record, dict):
-                raise ValueError("ms_swift record must be a JSON object")
-            messages = record.get("messages")
-            if not isinstance(messages, list):
-                raise ValueError("ms_swift messages must be a list")
-            for index, message in enumerate(messages):
-                if not isinstance(message, dict):
-                    raise ValueError(f"ms_swift messages[{index}] must be an object")
+            if isinstance(raw, str):
+                try:
+                    record = json.loads(raw)
+                except json.JSONDecodeError as error:
+                    raise ValueError(
+                        f"ms_swift record is malformed: invalid JSON ({error.msg})"
+                    ) from error
+            else:
+                record = raw
+            validate_ms_swift_record(record)
 
             converted = dict(record)
             derived_fields = set()
