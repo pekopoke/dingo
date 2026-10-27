@@ -3,13 +3,7 @@ import json
 import pytest
 
 from dingo.io.input import Data
-from dingo.model.rule.scibase.rule_patent import (
-    MAX_CLAIMS_LENGTH,
-    RulePatentFieldValidation,
-    check_document_number_unified,
-    check_ipc_unified,
-    check_prior_art_references,
-)
+from dingo.model.rule.scibase.rule_patent import MAX_CLAIMS_LENGTH, RulePatentFieldValidation, check_document_number_unified, check_ipc_unified, check_prior_art_references
 
 
 def _claims_with_string_length(length: int) -> list[dict]:
