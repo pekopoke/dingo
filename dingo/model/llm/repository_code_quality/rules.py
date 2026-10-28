@@ -1,7 +1,6 @@
 """Deterministic candidate and cross-record rules for repository code."""
 
 from __future__ import annotations
-
 import hashlib
 import re
 import zlib

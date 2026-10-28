@@ -1,12 +1,10 @@
 """Rule-first repository code truncation detection."""
 
 from __future__ import annotations
-
 import re
 import threading
 from pathlib import Path
 from typing import Any
-
 
 MIN_CONTENT_CHARS = 80
 MAX_CONTENT_CHARS = 2_000_000

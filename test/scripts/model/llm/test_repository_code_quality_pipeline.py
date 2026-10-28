@@ -2,22 +2,13 @@ import hashlib
 
 from dingo.io.input import Data
 from dingo.io.output.eval_detail import EvalDetail
-from dingo.model.llm.repository_code_quality import LLMRepositoryCodeQualityPipeline
+from dingo.model.llm.repository_code_quality import LLMRepositoryCodeQualityPipeline, truncation_rules
 from dingo.model.llm.repository_code_quality.input_content_rules import input_content_findings
-from dingo.model.llm.repository_code_quality.rules import (
-    RepositoryDuplicateIndex,
-    intra_document_repetition,
-    license_header,
-    security_candidates,
-)
+from dingo.model.llm.repository_code_quality.llm_repository_security_review import LLMRepositorySecurityPolitics, LLMRepositorySecurityProhibition
 from dingo.model.llm.repository_code_quality.llm_repository_sensitive_review import LLMRepositorySensitiveReview
-from dingo.model.llm.repository_code_quality.llm_repository_security_review import (
-    LLMRepositorySecurityPolitics,
-    LLMRepositorySecurityProhibition,
-)
-from dingo.model.llm.repository_code_quality.sensitive_rules import confirmed_security_findings
+from dingo.model.llm.repository_code_quality.rules import RepositoryDuplicateIndex, intra_document_repetition, license_header, security_candidates
 from dingo.model.llm.repository_code_quality.schema_rules import schema_findings
-from dingo.model.llm.repository_code_quality import truncation_rules
+from dingo.model.llm.repository_code_quality.sensitive_rules import confirmed_security_findings
 
 
 def repository_data(content, **kwargs):

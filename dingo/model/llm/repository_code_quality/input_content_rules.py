@@ -1,13 +1,11 @@
 """Deterministic hard gates for repository record input and content."""
 
 from __future__ import annotations
-
 import hashlib
 import re
 import unicodedata
 from pathlib import Path
 from typing import Any
-
 
 MIN_CONTENT_CHARS = 20
 MAX_CONTENT_CHARS = 2_000_000

@@ -1,10 +1,8 @@
 """Deterministic schema checks for repository-code JSONL records."""
 
 from __future__ import annotations
-
 import re
 from typing import Any
-
 
 REQUIRED_FIELDS = ("track_id", "source", "content", "language")
 SHA256_FIELDS = ("sha256", "dedup_content_sha256")

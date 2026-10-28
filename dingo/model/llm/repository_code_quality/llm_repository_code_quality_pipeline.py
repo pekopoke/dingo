@@ -8,23 +8,11 @@ from dingo.model import Model
 from dingo.model.llm.code_quality.base_code_quality import BaseCodeEvaluation, configured_evaluator, execution_error
 from dingo.model.llm.llm_text_advertisement import LLMTextAdvertisement
 from dingo.model.llm.repository_code_quality.input_content_rules import input_content_findings
+from dingo.model.llm.repository_code_quality.llm_repository_security_review import LLMRepositorySecurityPolitics, LLMRepositorySecurityProhibition
 from dingo.model.llm.repository_code_quality.llm_repository_sensitive_review import LLMRepositorySensitiveReview
-from dingo.model.llm.repository_code_quality.llm_repository_security_review import (
-    LLMRepositorySecurityPolitics,
-    LLMRepositorySecurityProhibition,
-)
-from dingo.model.llm.repository_code_quality.rules import (
-    RepositoryDuplicateIndex,
-    intra_document_repetition,
-    record_reference,
-    security_candidates,
-)
+from dingo.model.llm.repository_code_quality.rules import RepositoryDuplicateIndex, intra_document_repetition, record_reference, security_candidates
 from dingo.model.llm.repository_code_quality.schema_rules import schema_findings
-from dingo.model.llm.repository_code_quality.sensitive_rules import (
-    confirmed_security_findings,
-    contextual_security_candidates,
-    security_evidence,
-)
+from dingo.model.llm.repository_code_quality.sensitive_rules import confirmed_security_findings, contextual_security_candidates, security_evidence
 from dingo.model.llm.repository_code_quality.truncation_rules import code_truncation_finding
 
 

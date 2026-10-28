@@ -6,14 +6,12 @@ sent to the contextual LLM reviewer with a scrubbed line hint only.
 """
 
 from __future__ import annotations
-
 import ipaddress
 import json
 import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Callable
-
 
 _PLACEHOLDER = re.compile(
     r"(?i)^(?:your[_-]?.*|example|sample|dummy|test(?:ing)?|changeme|password|secret|"
