@@ -1,5 +1,6 @@
 import json
 import re
+from collections import Counter
 from typing import Any, List
 
 from dingo.config.input_args import EvaluatorRuleArgs
@@ -16,6 +17,25 @@ IPC_CODE_RE = re.compile(
     r"(?P<subclass>[A-Z]) "
     r"(?P<main_group>[1-9][0-9]{0,2})/"
     r"(?P<subgroup>[0-9]{2,6})$"
+)
+IPC_SOURCE_CODE_RE = re.compile(
+    r"^(?:[1-7]\s*)?"
+    r"(?P<subclass>[A-H]\s*(?:0[1-9]|[1-9][0-9])\s*[A-Z])\s*"
+    r"(?P<main_group>[0-9]{1,3})\s*/\s*"
+    r"(?P<subgroup>[0-9]{2,6})(?:\s+[AB])?$"
+)
+IPC_FIXED_WIDTH_RE = re.compile(
+    r"^(?P<subclass>[A-H](?:0[1-9]|[1-9][0-9])[A-Z])"
+    r"(?P<main_group>[0-9]{3})(?P<subgroup>[0-9]{2})$"
+)
+IPC_FRAGMENT_RE = re.compile(
+    r"^(?P<main_group>[0-9]{1,3})\s*/\s*"
+    r"(?P<subgroup>[0-9]{2,6})(?:\s+[AB])?$"
+)
+IPC_INCOMPLETE_RE = re.compile(r"^[A-H](?:(?:0[1-9]|[1-9][0-9])[A-Z]?)?$")
+IPC_AMBIGUOUS_RE = re.compile(
+    r"^(?P<subclass>[A-H]\s*(?:0[1-9]|[1-9][0-9])\s*[A-Z])"
+    r"(?P<separator>\s*)(?P<digits>[0-9]+)$"
 )
 ASCII_ALNUM_RE = re.compile(r"^[A-Za-z0-9]+$")
 JP_ERA_CITATION_RE = re.compile(
@@ -63,6 +83,7 @@ JP_PUBLICATION_DEFAULT_KIND_CODES = {
     "実用新案公表": "U",
 }
 ValidationResult = tuple[bool, List[str], List[str]]
+IPC_SOURCE_NOT_PROVIDED = object()
 
 
 def check_claims(claims: Any) -> ValidationResult:
@@ -79,7 +100,70 @@ def check_claims(claims: Any) -> ValidationResult:
     return False, [], []
 
 
-def check_ipc_unified(ipc_unified: Any) -> ValidationResult:
+def _convert_ipc_code(
+    ipc_code: str,
+    previous_subclass: str | None,
+) -> tuple[str, str | None, str | None, str | None]:
+    """Classify one source item and return its conversion and context.
+
+    The first value is ``success``, ``removed`` or ``conversion_failed``.
+    A bare four-character subclass is the only explicitly removable source
+    form; unknown or ambiguous forms are never silently treated as removals.
+    """
+
+    source = ipc_code.strip().upper()
+    match = IPC_SOURCE_CODE_RE.fullmatch(source)
+    if match is None:
+        # Only the original, contiguous nine-character form is fixed-width.
+        # Removing spaces first would wrongly decode ambiguous US values.
+        match = IPC_FIXED_WIDTH_RE.fullmatch(source)
+    if match is not None:
+        subclass = re.sub(r"\s+", "", match.group("subclass"))
+    else:
+        compact = re.sub(r"\s+", "", source)
+        if IPC_SUBCLASS_RE.fullmatch(compact):
+            return "removed", None, compact, None
+        if IPC_INCOMPLETE_RE.fullmatch(compact):
+            return "conversion_failed", None, None, "unsupported_format"
+        ambiguous = IPC_AMBIGUOUS_RE.fullmatch(source)
+        if ambiguous is not None:
+            subclass = re.sub(r"\s+", "", ambiguous.group("subclass"))
+            error_code = (
+                "ambiguous"
+                if ambiguous.group("separator") or len(ambiguous.group("digits")) < 6
+                else "unsupported_format"
+            )
+            return "conversion_failed", None, subclass, error_code
+        match = IPC_FRAGMENT_RE.fullmatch(source)
+        if match is None:
+            return "conversion_failed", None, None, "unsupported_format"
+        if previous_subclass is None:
+            return "conversion_failed", None, None, "missing_context"
+        subclass = previous_subclass
+
+    main_group = str(int(match.group("main_group")))
+    subgroup = match.group("subgroup")
+    # Preserve the existing zero-group convention accepted by this checker.
+    if main_group == "0" and int(subgroup) == 0:
+        return "success", subclass, subclass, None
+    expected = f"{subclass} {main_group}/{subgroup}"
+    if IPC_CODE_RE.fullmatch(expected) is None:
+        return "conversion_failed", None, None, "unsupported_format"
+    if subgroup != "00" and int(subgroup) == 0:
+        return "conversion_failed", None, None, "unsupported_format"
+    return "success", expected, subclass, None
+
+
+def check_ipc_unified(
+    ipc_unified: Any,
+    ipc: Any = IPC_SOURCE_NOT_PROVIDED,
+) -> ValidationResult:
+    """Validate output format and, when available, deterministic IPC conversions.
+
+    Lists and JSON arrays are accepted for both fields. Without a source this
+    retains format-only validation. Conversion results are compared as
+    multisets, so order is ignored while duplicate counts are preserved.
+    """
     if ipc_unified is None:
         return True, ["null"], ["value is null"]
 
@@ -90,15 +174,16 @@ def check_ipc_unified(ipc_unified: Any) -> ValidationResult:
             return True, ["invalid_json"], ["value must be a JSON array"]
 
     if not isinstance(ipc_unified, list):
-        return True, ["wrong_type"], ["value must be a list"]
+        return True, ["not_array"], ["value must be a list"]
 
     error_labels: List[str] = []
     reasons: List[str] = []
 
+    valid_output_indices: dict[str, List[int]] = {}
     for index, ipc_code in enumerate(ipc_unified):
         if not isinstance(ipc_code, str):
-            if "wrong_type" not in error_labels:
-                error_labels.append("wrong_type")
+            if "item_not_string" not in error_labels:
+                error_labels.append("item_not_string")
             reasons.append(f"item[{index}] must be a string")
             continue
 
@@ -106,14 +191,15 @@ def check_ipc_unified(ipc_unified: Any) -> ValidationResult:
         # normalized to the four-character subclass code (for example,
         # ``F03G 0/00`` becomes ``F03G``).
         if IPC_SUBCLASS_RE.fullmatch(ipc_code):
+            valid_output_indices.setdefault(ipc_code, []).append(index)
             continue
 
         match = IPC_CODE_RE.fullmatch(ipc_code)
         if match is None:
-            if "invalid_format" not in error_labels:
-                error_labels.append("invalid_format")
+            if "invalid_ipc_format" not in error_labels:
+                error_labels.append("invalid_ipc_format")
             reasons.append(
-                f"item[{index}] value {ipc_code!r} must match IPC format "
+                f"item[{index}] {ipc_code!r} must match IPC format "
                 "'<A-H><01-99><A-Z>' or "
                 "'<A-H><01-99><A-Z> <1-999>/<2-6 digits>'"
             )
@@ -121,12 +207,126 @@ def check_ipc_unified(ipc_unified: Any) -> ValidationResult:
 
         subgroup = match.group("subgroup")
         if subgroup != "00" and int(subgroup) == 0:
-            if "invalid_format" not in error_labels:
-                error_labels.append("invalid_format")
+            if "invalid_ipc_format" not in error_labels:
+                error_labels.append("invalid_ipc_format")
             reasons.append(
-                f"item[{index}] value {ipc_code!r} subgroup may be zero only "
+                f"item[{index}] {ipc_code!r} subgroup may be zero only "
                 "when written as '00'"
             )
+            continue
+        valid_output_indices.setdefault(ipc_code, []).append(index)
+
+    if ipc is IPC_SOURCE_NOT_PROVIDED:
+        return bool(error_labels), error_labels, reasons
+    if ipc is None:
+        error_labels.append("source_invalid.null")
+        reasons.append("ipc is null")
+        return True, error_labels, reasons
+    if isinstance(ipc, str):
+        try:
+            ipc = json.loads(ipc, strict=False)
+        except json.JSONDecodeError:
+            error_labels.append("source_invalid.invalid_json")
+            reasons.append("ipc must be a JSON array")
+            return True, error_labels, reasons
+    if not isinstance(ipc, list):
+        error_labels.append("source_invalid.not_array")
+        reasons.append("ipc must be a list")
+        return True, error_labels, reasons
+
+    expected_sources: dict[str, List[int]] = {}
+    comparison_is_resolved = True
+    previous_subclass = None
+    for index, source_code in enumerate(ipc):
+        if not isinstance(source_code, str):
+            if "source_invalid.item_not_string" not in error_labels:
+                error_labels.append("source_invalid.item_not_string")
+            reasons.append(f"ipc item[{index}] must be a string")
+            comparison_is_resolved = False
+            previous_subclass = None
+            continue
+        status, expected, previous_subclass, detail = _convert_ipc_code(
+            source_code, previous_subclass
+        )
+        if status == "success":
+            expected_sources.setdefault(expected, []).append(index)
+        elif status == "conversion_failed":
+            label = f"conversion_failed.{detail}"
+            if label not in error_labels:
+                error_labels.append(label)
+            reason_detail = {
+                "ambiguous": "has more than one possible slashless group split",
+                "missing_context": "is a group fragment without preceding subclass context",
+                "unsupported_format": "uses a compact format that conversion does not support",
+            }[detail]
+            reasons.append(f"ipc[{index}] {source_code!r} {reason_detail}")
+            comparison_is_resolved = False
+
+    expected_counts = Counter(
+        {value: len(source_indices) for value, source_indices in expected_sources.items()}
+    )
+    actual_counts = Counter(
+        {value: len(indices) for value, indices in valid_output_indices.items()}
+    )
+    total_valid_outputs = sum(actual_counts.values())
+
+    def add_label(label: str) -> None:
+        if label not in error_labels:
+            error_labels.append(label)
+
+    missing_values = [
+        value
+        for value, expected_count in expected_counts.items()
+        if actual_counts[value] < expected_count
+    ]
+    if missing_values and total_valid_outputs == 0:
+        add_label("missing.all")
+        for value in missing_values:
+            sources = ", ".join(f"ipc[{index}]" for index in expected_sources[value])
+            reasons.append(
+                f"expected {value!r} {expected_counts[value]} time(s) from {sources}, "
+                "but ipc_unified contains no valid IPC items"
+            )
+    else:
+        for value in missing_values:
+            expected_count = expected_counts[value]
+            actual_count = actual_counts[value]
+            sources = ", ".join(f"ipc[{index}]" for index in expected_sources[value])
+            if actual_count == 0:
+                add_label("missing.value")
+                reasons.append(
+                    f"expected {value!r} {expected_count} time(s) from {sources}, "
+                    "but it is absent from ipc_unified"
+                )
+            else:
+                add_label("missing.count")
+                reasons.append(
+                    f"{value!r} expected {expected_count} time(s) from {sources}, "
+                    f"found {actual_count}; missing {expected_count - actual_count}"
+                )
+
+    if comparison_is_resolved:
+        if not ipc and total_valid_outputs:
+            add_label("extra.empty_source")
+            for value, indices in valid_output_indices.items():
+                for index in indices:
+                    reasons.append(f"ipc_unified[{index}] {value!r}: source ipc is empty")
+        else:
+            for value, actual_count in actual_counts.items():
+                expected_count = expected_counts[value]
+                if expected_count == 0:
+                    add_label("extra.value")
+                    for index in valid_output_indices[value]:
+                        reasons.append(
+                            f"ipc_unified[{index}] {value!r}: no source conversion produces this value"
+                        )
+                elif actual_count > expected_count:
+                    add_label("extra.count")
+                    extra_indices = valid_output_indices[value][expected_count:]
+                    reasons.append(
+                        f"{value!r} expected {expected_count} time(s), found {actual_count}; "
+                        f"extra at {', '.join(f'ipc_unified[{index}]' for index in extra_indices)}"
+                    )
 
     return bool(error_labels), error_labels, reasons
 
@@ -205,27 +405,27 @@ def _expected_jp_document_number(document_number: str) -> str | None:
     return None
 
 
-def check_document_number_unifed(
-    document_number_unifed: Any,
+def check_document_number_unified(
+    document_number_unified: Any,
     document_number: Any = None,
 ) -> ValidationResult:
     error_labels: List[str] = []
     reasons: List[str] = []
 
-    if not isinstance(document_number_unifed, str):
+    if not isinstance(document_number_unified, str):
         return True, ["wrong_type"], ["value must be a string"]
 
-    if ASCII_ALNUM_RE.fullmatch(document_number_unifed) is None:
+    if ASCII_ALNUM_RE.fullmatch(document_number_unified) is None:
         error_labels.append("invalid_format")
         reasons.append("value must contain only ASCII letters and digits")
 
     if isinstance(document_number, str):
         expected = _expected_jp_document_number(document_number)
-        if expected is not None and document_number_unifed != expected:
+        if expected is not None and document_number_unified != expected:
             error_labels.append("incorrect_conversion")
             reasons.append(
                 f"conversion from document_number {document_number!r} is incorrect: "
-                f"expected {expected!r}, got {document_number_unifed!r}"
+                f"expected {expected!r}, got {document_number_unified!r}"
             )
 
     return bool(error_labels), error_labels, reasons
@@ -245,7 +445,7 @@ def check_prior_art_references(prior_art_references: Any) -> ValidationResult:
         "sequence",
         "srep_phase",
         "document_number",
-        "document_number_unifed",
+        "document_number_unified",
     }
     error_labels: List[str] = []
     reasons: List[str] = []
@@ -268,15 +468,15 @@ def check_prior_art_references(prior_art_references: Any) -> ValidationResult:
             )
             continue
 
-        invalid, nested_labels, nested_reasons = check_document_number_unifed(
-            reference["document_number_unifed"],
+        invalid, nested_labels, nested_reasons = check_document_number_unified(
+            reference["document_number_unified"],
             reference["document_number"],
         )
         if invalid:
             for error_label in nested_labels:
                 add_error_label(error_label)
             reasons.extend(
-                f"item[{index}].document_number_unifed: {reason}"
+                f"item[{index}].document_number_unified: {reason}"
                 for reason in nested_reasons
             )
 
@@ -285,9 +485,12 @@ def check_prior_art_references(prior_art_references: Any) -> ValidationResult:
 
 FIELD_VALIDATORS = {
     "claims": lambda record: check_claims(record.get("claims")),
-    "ipc_unified": lambda record: check_ipc_unified(record.get("ipc_unified")),
-    "document_number_unifed": lambda record: check_document_number_unifed(
-        record.get("document_number_unifed"),
+    "ipc_unified": lambda record: check_ipc_unified(
+        record.get("ipc_unified"),
+        record["ipc"] if "ipc" in record else IPC_SOURCE_NOT_PROVIDED,
+    ),
+    "document_number_unified": lambda record: check_document_number_unified(
+        record.get("document_number_unified"),
         record.get("document_number"),
     ),
     "prior_art_references": lambda record: check_prior_art_references(

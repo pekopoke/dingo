@@ -64,7 +64,7 @@ The specific rules for each quality metric are as follows:
 | RuleOnlyUrl | EFFECTIVENESS | Check whether content consists only of a URL. | |
 | RulePatternSearch | RELEVANCE | Search content using a user-provided pattern. | |
 | RulePIIDetection | SECURITY | Detect personally identifiable information in text. | |
-| RulePatentFieldValidation | EFFECTIVENESS | Validate patent claims length and IPC classification-code format. | |
+| RulePatentFieldValidation | EFFECTIVENESS | Validate patent metadata fields, including IPC format and conversion from ipc to ipc_unified. | |
 | RuleQuanliangFieldValidation | EFFECTIVENESS | Validate full-volume scientific metadata fields. | |
 | RuleResumeDateFormat | RESUME_DATE | Check whether a resume uses inconsistent date formats. | |
 | RuleResumeDetailedAddress | RESUME_PRIVACY | Check whether a resume contains a detailed address. | |
@@ -94,3 +94,43 @@ The specific rules for each quality metric are as follows:
 | RuleWordNumber | EFFECTIVENESS     | check whether the number of word in [20, 100000]                                      | [Redpajama](https://www.together.ai/blog/redpajama-data-v2) [MAP-en](https://arxiv.org/abs/2405.19327) [Gopher](https://arxiv.org/abs/2112.11446) [Dolma](https://arxiv.org/abs/2402.00159)                         |
 | RuleWordSplit | FLUENCY | Check PDF content for abnormally split words. | |
 | RuleWordStuck | FLUENCY | Check whether words are abnormally joined together. | |
+
+`RulePatentFieldValidation` checks `ipc_unified` against the original `ipc` when
+available. Both fields accept lists or JSON arrays. Deterministic conversions
+include uppercasing, removing pre-IPC-8 edition prefixes (including `3`), merging
+subclass spaces, removing main-group leading zeros and A/B suffixes, decoding
+contiguous nine-character USPTO codes, and filling a fragment's subclass from
+the immediately preceding source item. The existing zero-group reduction
+(`F03G 0/00` to `F03G`) is retained.
+
+Validation labels are divided by stage:
+
+| Stage | Labels |
+|---|---|
+| Output validity | `ipc_unified.null`, `.invalid_json`, `.not_array`, `.item_not_string`, `.invalid_ipc_format` |
+| Source validity | `ipc_unified.source_invalid.null`, `.invalid_json`, `.not_array`, `.item_not_string` |
+| Conversion failure | `ipc_unified.conversion_failed.ambiguous`, `.missing_context`, `.unsupported_format` |
+| Missing output | `ipc_unified.missing.all`, `.value`, `.count` |
+| Extra output | `ipc_unified.extra.empty_source`, `.value`, `.count` |
+
+Converted values are compared as multisets: output order is ignored, while
+duplicate counts are preserved. `missing.all` is exclusive with the other
+missing labels. For each value, absence uses `missing.value`, a short duplicate
+count uses `missing.count`, an unknown value uses `extra.value`, and excess
+duplicates use `extra.count`. A wrong conversion therefore normally produces
+both `missing.value` and `extra.value`.
+
+A bare subclass such as `A61K` is the only source form explicitly removed; it
+may still provide context to a following fragment. Ambiguous slashless values
+such as `H01R 1200`, context-free fragments such as `216/14`, and unsupported
+compact formats such as `G05F001455` are conversion failures, not removals.
+If the source structure is invalid or any source string remains unresolved,
+known expected values are still checked for missing output, but extra-output
+checks are suppressed because the unresolved item may account for them. Invalid
+output elements receive only an output-validity label and are excluded from
+missing/extra counts.
+
+Omitting `ipc` keeps the check in output-format-only mode for compatibility;
+an explicitly null `ipc` is `source_invalid.null`. This checker does not modify
+either field or validate `ipc_edition_statement`, and it validates syntax rather
+than membership in an official IPC classification catalogue.
