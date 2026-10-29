@@ -1,4 +1,4 @@
-"""Deterministic candidate and cross-record rules for repository code."""
+"""Deterministic intra-document and cross-record similarity rules for repository code."""
 
 from __future__ import annotations
 import hashlib
@@ -7,8 +7,6 @@ import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
-
-from dingo.model.llm.repository_code_quality.sensitive_rules import security_candidates
 
 TOKEN_SHINGLE_SIZE = 5
 MIN_NEAR_TOKENS = 30
